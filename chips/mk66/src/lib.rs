@@ -15,6 +15,7 @@ extern crate twofish;
 extern crate block_cipher_trait;
 
 pub mod chip;
+pub mod clock_pm;
 pub mod nvic;
 pub mod wdog;
 pub mod gpio;
