@@ -1,18 +1,17 @@
 use capsules::led::ActivationMode;
+use kernel::hil::gpio;
 use kernel::static_init;
 use mk66;
 
-type PinHandle = &'static mk66::gpio::Gpio<'static>;
-
-pub unsafe fn configure_all_pins() -> (&'static [PinHandle],
-                                       &'static [(PinHandle, ActivationMode)]) {
+pub unsafe fn configure_all_pins() -> (&'static [&'static dyn gpio::InterruptValuePin],
+                                       &'static [(&'static dyn gpio::Pin, ActivationMode)]) {
     use mk66::gpio::functions::*;
     use mk66::gpio::*;
 
     // The index of each pin in this array corresponds to Teensy 3.6 pinout.
     // In other words, gpio_pins[13] is Teensy pin 13, and so on.
     let gpio_pins = static_init!(
-        [PinHandle; 58],
+        [&'static mk66::gpio::Gpio; 58],
         [PB16.claim_as_gpio(), PB17.claim_as_gpio(), PD00.claim_as_gpio(),
          PA12.claim_as_gpio(), PA13.claim_as_gpio(), PD07.claim_as_gpio(),
          PD04.claim_as_gpio(), PD02.claim_as_gpio(), PD03.claim_as_gpio(),
@@ -35,9 +34,247 @@ pub unsafe fn configure_all_pins() -> (&'static [PinHandle],
          PE11.claim_as_gpio()]);
 
     let led_pins = static_init!(
-            [(&'static mk66::gpio::Gpio<'static>, ActivationMode); 1],
-            [(gpio_pins[13], ActivationMode::ActiveHigh)]
+            [(&'static dyn gpio::Pin, ActivationMode); 1],
+            [(gpio_pins[13] as &'static dyn gpio::Pin, ActivationMode::ActiveHigh)]
         );
+
+    let gpio_interrupt_pins = static_init!(
+        [&'static dyn gpio::InterruptValuePin; 58],
+        [
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[0] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[1] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[2] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[3] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[4] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[5] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[6] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[7] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[8] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[9] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[10] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[11] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[12] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[13] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[14] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[15] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[16] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[17] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[18] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[19] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[20] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[21] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[22] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[23] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[24] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[25] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[26] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[27] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[28] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[29] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[30] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[31] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[32] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[33] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[34] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[35] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[36] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[37] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[38] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[39] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[40] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[41] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[42] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[43] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[44] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[45] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[46] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[47] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[48] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[49] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[50] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[51] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[52] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[53] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[54] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[55] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[56] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+            static_init!(
+                gpio::InterruptValueWrapper,
+                gpio::InterruptValueWrapper::new(gpio_pins[57] as &'static dyn gpio::InterruptPin)
+            ).finalize(),
+        ]
+    );
 
     // UART0
     PB17.release_claim();
@@ -77,6 +314,6 @@ pub unsafe fn configure_all_pins() -> (&'static [PinHandle],
     PA14.claim_as(I2C2_SCLK0);
 
     // I2C3 appears not to be used at all.
-    (gpio_pins, led_pins)
+    (gpio_interrupt_pins, led_pins)
 }
 

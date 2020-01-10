@@ -50,7 +50,7 @@ const BASE_ADDRESS: *const RngaRegisters = 0x40029000 as *const RngaRegisters;
 
 pub struct Entropy<'a> {
     regs: *const RngaRegisters,
-    client: OptionalCell<&'a entropy::Client32>,
+    client: OptionalCell<&'a dyn entropy::Client32>,
     key: Cell<[u8; 32]>,
     counter: Cell<u128>,
 }
@@ -165,7 +165,7 @@ impl<'a> entropy::Entropy32<'a> for Entropy<'a> {
         ReturnCode::SUCCESS
     }
 
-    fn set_client(&self, client: &'a entropy::Client32) {
+    fn set_client(&self, client: &'a dyn entropy::Client32) {
         self.client.replace(client);
     }
 

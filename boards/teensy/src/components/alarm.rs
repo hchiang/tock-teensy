@@ -1,10 +1,10 @@
 use capsules::alarm::AlarmDriver;
 use kernel;
 use kernel::capabilities;
-use components::Component;
+use kernel::component::Component;
 use kernel::create_capability;
+use kernel::hil::time::Alarm;
 use kernel::static_init;
-use mk66;
 
 pub struct AlarmComponent {
     board_kernel: &'static kernel::Kernel,
@@ -19,9 +19,10 @@ impl AlarmComponent {
 }
 
 impl Component for AlarmComponent {
+    type StaticInput = ();
     type Output = &'static AlarmDriver<'static, mk66::pit::Pit<'static>>;
 
-    unsafe fn finalize(&mut self) -> Option<Self::Output> {
+    unsafe fn finalize(&mut self, _s: Self::StaticInput) -> Self::Output {
         let grant_cap = create_capability!(capabilities::MemoryAllocationCapability);
 
         mk66::pit::PIT.init();
@@ -32,6 +33,6 @@ impl Component for AlarmComponent {
                                 self.board_kernel.create_grant(&grant_cap))
             );
         mk66::pit::PIT.set_client(alarm);
-        Some(alarm)
+        alarm
     }
 }

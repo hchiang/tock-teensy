@@ -1,7 +1,7 @@
 use capsules::rng;
-use components::Component;
 use kernel;
 use kernel::{capabilities, create_capability, static_init};
+use kernel::component::Component;
 use kernel::hil::entropy::Entropy32;
 use kernel::hil::rng::Rng;
 use mk66;
@@ -18,9 +18,10 @@ impl RngaComponent {
 }
 
 impl Component for RngaComponent {
+    type StaticInput = ();
     type Output = &'static rng::RngDriver<'static>;
 
-    unsafe fn finalize(&mut self) -> Option<Self::Output> {
+    unsafe fn finalize(&mut self, _s: Self::StaticInput) -> Self::Output {
         let grant_cap = create_capability!(capabilities::MemoryAllocationCapability);
 
         let entropy_to_random = static_init!(
@@ -38,6 +39,6 @@ impl Component for RngaComponent {
         mk66::rnga::ENTROPY.set_client(entropy_to_random);        
         entropy_to_random.set_client(rng);
 
-        Some(rng)
+        rng
     }
 }

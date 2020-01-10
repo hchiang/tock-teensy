@@ -36,9 +36,10 @@ impl ConsoleComponent {
 }
 
 impl Component for ConsoleComponent {
+    type StaticInput = ();
     type Output = &'static console::Console<'static>;
 
-    unsafe fn finalize(&mut self) -> Self::Output {
+    unsafe fn finalize(&mut self, _s: Self::StaticInput) -> Self::Output {
         let grant_cap = create_capability!(capabilities::MemoryAllocationCapability);
 
         // Create virtual device for console.
@@ -58,23 +59,23 @@ impl Component for ConsoleComponent {
         hil::uart::Receive::set_receive_client(console_uart, console);
 
         // Create virtual device for kernel debug.
-        let debugger_uart = static_init!(UartDevice, UartDevice::new(self.uart_mux, false));
-        debugger_uart.setup();
-        let debugger = static_init!(
-            kernel::debug::DebugWriter,
-            kernel::debug::DebugWriter::new(
-                debugger_uart,
-                &mut kernel::debug::OUTPUT_BUF,
-                &mut kernel::debug::INTERNAL_BUF,
-            )
-        );
-        hil::uart::Transmit::set_transmit_client(debugger_uart, debugger);
+        //let debugger_uart = static_init!(UartDevice, UartDevice::new(self.uart_mux, false));
+        //debugger_uart.setup();
+        //let debugger = static_init!(
+        //    kernel::debug::DebugWriter,
+        //    kernel::debug::DebugWriter::new(
+        //        debugger_uart,
+        //        &mut kernel::debug::OUTPUT_BUF,
+        //        &mut kernel::debug::INTERNAL_BUF,
+        //    )
+        //);
+        //hil::uart::Transmit::set_transmit_client(debugger_uart, debugger);
 
-        let debug_wrapper = static_init!(
-            kernel::debug::DebugWriterWrapper,
-            kernel::debug::DebugWriterWrapper::new(debugger)
-        );
-        kernel::debug::set_debug_writer_wrapper(debug_wrapper);
+        //let debug_wrapper = static_init!(
+        //    kernel::debug::DebugWriterWrapper,
+        //    kernel::debug::DebugWriterWrapper::new(debugger)
+        //);
+        //kernel::debug::set_debug_writer_wrapper(debug_wrapper);
 
         console
     }

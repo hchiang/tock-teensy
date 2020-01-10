@@ -1,5 +1,6 @@
 #![allow(unused)]
 
+use kernel::hil::gpio::Configure;
 use mk66::{gpio, clock};
 use mk66::gpio::*;
 
@@ -22,7 +23,7 @@ pub fn led_on() {
     unsafe {
         PC05.release_claim();
         let led = PC05.claim_as_gpio();
-        led.enable_output();
+        led.make_output();
         led.set();
     }
 }
@@ -31,7 +32,7 @@ pub fn led_off() {
     unsafe {
         PC05.release_claim();
         let led = PC05.claim_as_gpio();
-        led.enable_output();
+        led.make_output();
         led.clear();
     }
 }
@@ -40,7 +41,7 @@ pub fn led_toggle() {
     unsafe {
         PC05.release_claim();
         let led = PC05.claim_as_gpio();
-        led.enable_output();
+        led.make_output();
         led.toggle();
     }
 }

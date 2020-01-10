@@ -1,20 +1,19 @@
 use kernel::hil::clock_pm::*;
-use crate::pm;
-use cortexm4;
+//use cortexm4;
 
-const RCSYS: u32        = 0x002; 
-const RC1M: u32         = 0x004; 
-const RCFAST4M: u32     = 0x008; 
-const RCFAST8M: u32     = 0x010;    
-const RCFAST12M: u32    = 0x020; 
-const EXTOSC: u32       = 0x040; 
-const RC80M: u32        = 0x080;
-const DFLL: u32         = 0x100; 
-const PLL: u32          = 0x200; 
+//const RCSYS: u32        = 0x002; 
+//const RC1M: u32         = 0x004; 
+//const RCFAST4M: u32     = 0x008; 
+//const RCFAST8M: u32     = 0x010;    
+//const RCFAST12M: u32    = 0x020; 
+//const EXTOSC: u32       = 0x040; 
+//const RC80M: u32        = 0x080;
+//const DFLL: u32         = 0x100; 
+//const PLL: u32          = 0x200; 
 
 pub struct TeensyClockManager;
 
-pub static TeensyCM: TeensyClockManager = TeensyClockManager::new();
+pub static CM: TeensyClockManager = TeensyClockManager::new();
 
 impl TeensyClockManager {
 
@@ -118,7 +117,7 @@ impl ClockConfigs for TeensyClockManager {
     }
 
     fn change_system_clock(&self, clock: u32) {
-        let system_clock = self.convert_to_clock(clock);
+        //let system_clock = self.convert_to_clock(clock);
         //unsafe {
         //    pm::PM.change_system_clock(system_clock);
         //    cortexm4::systick::SysTick::set_hertz(pm::get_system_frequency());

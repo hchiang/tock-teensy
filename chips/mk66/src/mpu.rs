@@ -12,6 +12,7 @@
 //! - Updated to 1.3 MPU interface by Philip Levis <pal@cs.stanford.edu>
 
 use core::cmp;
+use core::fmt::{self};
 
 use kernel::common::registers::{register_bitfields, FieldValue, ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
@@ -372,6 +373,12 @@ impl Default for K66Config {
                 K66ConfigRegion::empty(),
             ],
         }
+    }
+}
+
+impl fmt::Display for K66Config {
+    fn fmt(&self, _f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        Ok(())
     }
 }
 

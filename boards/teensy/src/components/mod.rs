@@ -1,13 +1,3 @@
-pub trait Component {
-    type Output;
-
-    unsafe fn finalize(&mut self) -> Option<Self::Output>;
-}
-
-pub trait ComponentWithDependency<D>: Component {
-    fn dependency(&mut self, _dep: D) -> &mut Self { self }
-}
-
 mod clock_pm;
 mod gpio;
 mod led;

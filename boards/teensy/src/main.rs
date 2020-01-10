@@ -29,6 +29,7 @@ mod pins;
 use components::*;
 use kernel::{create_capability, static_init};
 use kernel::capabilities;
+use kernel::component::Component;
 
 const NUM_PROCS: usize = 1;
 
@@ -39,7 +40,7 @@ static mut APP_MEMORY: [u8; 1 << 17] = [0; 1 << 17];
 // How the kernel responds when a process faults
 const FAULT_RESPONSE: kernel::procs::FaultResponse = kernel::procs::FaultResponse::Panic;
 
-static mut PROCESSES: [Option<&'static kernel::procs::ProcessType>; NUM_PROCS] = [None; NUM_PROCS];
+static mut PROCESSES: [Option<&'static dyn kernel::procs::ProcessType>; NUM_PROCS] = [None; NUM_PROCS];
 
 #[allow(unused)]
 struct Teensy {
@@ -54,7 +55,7 @@ struct Teensy {
 
 impl kernel::Platform for Teensy {
     fn with_driver<F, R>(&self, driver_num: usize, f: F) -> R
-        where F: FnOnce(Option<&kernel::Driver>) -> R
+        where F: FnOnce(Option<& dyn kernel::Driver>) -> R
     {
         match driver_num {
             //xconsole::DRIVER_NUM => f(Some(self.xconsole)),
@@ -103,17 +104,15 @@ pub unsafe fn reset_handler() {
     
     let (gpio_pins, led_pins) = pins::configure_all_pins();
     let gpio = GpioComponent::new(board_kernel)
-                             .dependency(gpio_pins)
-                             .finalize().unwrap();
+                             .finalize(gpio_pins);
     let led = LedComponent::new()
-                           .dependency(led_pins)
-                           .finalize().unwrap();
-    let spi = VirtualSpiComponent::new().finalize().unwrap();
-    let alarm = AlarmComponent::new(board_kernel).finalize().unwrap();
-    //let xconsole = XConsoleComponent::new().finalize().unwrap();
-    let rng = RngaComponent::new(board_kernel).finalize().unwrap();
+                           .finalize(led_pins);
+    let spi = VirtualSpiComponent::new().finalize(());
+    let alarm = AlarmComponent::new(board_kernel).finalize(());
+    //let xconsole = XConsoleComponent::new().finalize(());
+    let rng = RngaComponent::new(board_kernel).finalize(());
 
-    let clock_manager = ClockManagerComponent::new(&sam4l::clock_pm::TeensyCM).finalize();
+    let clock_manager = ClockManagerComponent::new(&mk66::clock_pm::CM).finalize(());
     
     let teensy = Teensy {
         //xconsole: xconsole,

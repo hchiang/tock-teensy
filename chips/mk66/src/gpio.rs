@@ -6,10 +6,11 @@
 use core::cell::Cell;
 use core::sync::atomic::Ordering;
 use core::marker::PhantomData;
-use core::sync::atomic::{AtomicBool, ATOMIC_BOOL_INIT};
+use core::sync::atomic::AtomicBool;
 use kernel::common::registers::{register_bitfields, ReadWrite, WriteOnly, ReadOnly};
 use core::mem;
 use kernel::hil;
+use kernel::hil::gpio;
 use nvic::{self, NvicIdx};
 
 // Register map for a single Port Control and Interrupt module
@@ -82,26 +83,25 @@ pub enum PeripheralFunction {
     Alt7
 }
 
-pub struct Port<'a> {
+pub struct Port {
     regs: *mut PortRegisters,
     bitband: *mut GpioBitbandRegisters,
-    clients: [Cell<Option<&'a hil::gpio::Client>>; 32],
-    client_data: [Cell<usize>; 32]
+    clients: [Cell<Option<&'static dyn gpio::Client>>; 32],
 }
 
-pub struct Pin<'a, P: PinNum> {
-    gpio: Gpio<'a>,
+pub struct Pin<P: PinNum> {
+    gpio: Gpio,
     _pin: PhantomData<P>
 }
 
-pub struct Gpio<'a> {
+pub struct Gpio {
     pin: usize,
-    port: &'a Port<'a>,
-    valid: AtomicBool
+    port: &'static Port,
+    valid: AtomicBool,
 }
 
-impl<'a> Port<'a> {
-    const fn new(port: usize) -> Port<'a> {
+impl Port {
+    const fn new(port: usize) -> Port {
         Port {
             regs: (PORT_BASE_ADDRESS + port*PORT_SIZE) as *mut PortRegisters,
             bitband: (GPIO_BASE_ADDRESS + port*GPIO_SIZE) as *mut GpioBitbandRegisters,
@@ -122,23 +122,6 @@ impl<'a> Port<'a> {
                       Cell::new(None), Cell::new(None),
                       Cell::new(None), Cell::new(None)
                 ],
-            client_data: [Cell::new(0), Cell::new(0),
-                          Cell::new(0), Cell::new(0),
-                          Cell::new(0), Cell::new(0),
-                          Cell::new(0), Cell::new(0),
-                          Cell::new(0), Cell::new(0),
-                          Cell::new(0), Cell::new(0),
-                          Cell::new(0), Cell::new(0),
-                          Cell::new(0), Cell::new(0),
-                          Cell::new(0), Cell::new(0),
-                          Cell::new(0), Cell::new(0),
-                          Cell::new(0), Cell::new(0),
-                          Cell::new(0), Cell::new(0),
-                          Cell::new(0), Cell::new(0),
-                          Cell::new(0), Cell::new(0),
-                          Cell::new(0), Cell::new(0),
-                          Cell::new(0), Cell::new(0)
-                ]
         }
     }
 
@@ -158,7 +141,7 @@ impl<'a> Port<'a> {
             if pin < self.clients.len() {
                 fired &= !(1 << pin);
                 self.clients[pin].get().map(|client| {
-                    client.fired(self.client_data[pin].get());
+                    client.fired();
                 });
             } else {
                 break;
@@ -173,26 +156,26 @@ const PORT_SIZE: usize = 0x1000;
 const GPIO_BASE_ADDRESS: usize = 0x43FE_0000;
 const GPIO_SIZE: usize = 0x800;
 
-impl<'a, P: PinNum> Pin<'a, P> {
-    const fn new(port: &'a Port<'a>) -> Pin<'a, P> {
+impl<P: PinNum> Pin<P> {
+    const fn new(port: &'static Port) -> Pin<P> {
         Pin {
             gpio: Gpio {
                 pin: P::PIN,
                 port: port,
-                valid: ATOMIC_BOOL_INIT
+                valid: AtomicBool::new(false),
             },
             _pin: PhantomData,
         }
     }
 
-    pub fn claim_as_gpio(&mut self) -> &mut Gpio<'a> {
+    pub fn claim_as_gpio(&mut self) -> &mut Gpio {
         let already_allocated = self.gpio.valid.swap(true, Ordering::Relaxed);
         if already_allocated {
             let port_name = match self.gpio.pin {
-                0...31 => "A",
-                32...63 => "B",
-                64...95 => "C",
-                96...127 => "D",
+                0..=31 => "A",
+                32..=63 => "B",
+                64..=95 => "C",
+                96..=127 => "D",
                 _ => "E"
             };
             panic!("Requested GPIO pin P{}{} is already allocated.", port_name, self.gpio.index());
@@ -220,19 +203,31 @@ impl<'a, P: PinNum> Pin<'a, P> {
 
     pub fn release_claim(&self) {
         self.gpio.clear_client();
-        self.gpio.set_client_data(0);
         self.set_peripheral_function(PeripheralFunction::Alt0);
         self.gpio.valid.swap(false, Ordering::Relaxed);
     }
 }
 
-impl<'a> Gpio<'a> {
+impl<P: PinNum> hil::Controller for Pin<P> {
+    type Config = functions::Function<P>;
+
+    fn configure(&self, config: Self::Config) {
+        self.claim_as(config);
+    }
+}
+
+impl Gpio {
     pub fn regs(&self) -> &mut GpioBitbandRegisters {
         unsafe { mem::transmute(self.port.bitband) }
     }
 
     fn index(&self) -> usize {
         (self.pin % 32) as usize
+    }
+
+    pub fn is_enabled(&self) -> bool {
+        let port = self.port.regs();
+        port.pcr[self.index()].read(PinControl::MUX) == (PeripheralFunction::Alt1 as u32)
     }
 
     pub fn disable_output(&self) {
@@ -243,12 +238,17 @@ impl<'a> Gpio<'a> {
         self.regs().direction[self.index()].set(1);
     }
 
+    pub fn is_output(&self) -> bool {
+        self.regs().direction[self.index()].get() == 1
+    }
+
     pub fn read(&self) -> bool {
         self.regs().input[self.index()].get() > 0
     }
 
-    pub fn toggle(&self) {
+    pub fn toggle(&self) -> bool {
         self.regs().toggle[self.index()].set(1);
+        self.regs().output[self.index()].get() == 1
     }
 
     pub fn set(&self) {
@@ -259,21 +259,21 @@ impl<'a> Gpio<'a> {
         self.regs().clear[self.index()].set(1);
     }
 
-    pub fn set_input_mode(&self, mode: hil::gpio::InputMode) {
+    pub fn set_input_mode(&self, mode: gpio::FloatingState) {
         let config = match mode {
-            hil::gpio::InputMode::PullUp => PinControl::PE::SET + PinControl::PS::PullUp,
-            hil::gpio::InputMode::PullDown => PinControl::PE::SET + PinControl::PS::PullDown,
-            hil::gpio::InputMode::PullNone => PinControl::PE::CLEAR,
+            gpio::FloatingState::PullUp => PinControl::PE::SET + PinControl::PS::PullUp,
+            gpio::FloatingState::PullDown => PinControl::PE::SET + PinControl::PS::PullDown,
+            gpio::FloatingState::PullNone => PinControl::PE::CLEAR,
         };
 
         self.port.regs().pcr[self.index()].modify(config);
     }
 
-    pub fn set_interrupt_mode(&self, mode: hil::gpio::InterruptMode) {
+    pub fn set_interrupt_mode(&self, mode: gpio::InterruptEdge) {
         let config = match mode {
-            hil::gpio::InterruptMode::RisingEdge => PinControl::IRQC::InterruptRisingEdge,
-            hil::gpio::InterruptMode::FallingEdge => PinControl::IRQC::InterruptFallingEdge,
-            hil::gpio::InterruptMode::EitherEdge => PinControl::IRQC::InterruptEitherEdge
+            gpio::InterruptEdge::RisingEdge => PinControl::IRQC::InterruptRisingEdge,
+            gpio::InterruptEdge::FallingEdge => PinControl::IRQC::InterruptFallingEdge,
+            gpio::InterruptEdge::EitherEdge => PinControl::IRQC::InterruptEitherEdge
         };
 
         self.port.regs().pcr[self.index()].modify(config);
@@ -286,10 +286,10 @@ impl<'a> Gpio<'a> {
     fn enable_interrupt(&self) {
         unsafe {
             match self.pin {
-                0...31 => nvic::enable(NvicIdx::PCMA),
-                32...63 => nvic::enable(NvicIdx::PCMB),
-                64...95 => nvic::enable(NvicIdx::PCMC),
-                96...127 => nvic::enable(NvicIdx::PCMD),
+                0..=31 => nvic::enable(NvicIdx::PCMA),
+                32..=63 => nvic::enable(NvicIdx::PCMB),
+                64..=95 => nvic::enable(NvicIdx::PCMC),
+                96..=127 => nvic::enable(NvicIdx::PCMD),
                 _ => nvic::enable(NvicIdx::PCME)
             };
         }
@@ -308,7 +308,7 @@ impl<'a> Gpio<'a> {
         self.port.clients[self.index()].set(None);
     }
 
-    pub fn set_client<C: hil::gpio::Client>(&self, client: &'static C) {
+    pub fn set_client(&self, client: &'static dyn gpio::Client) {
         if !self.valid.load(Ordering::Relaxed) {
             return;
         }
@@ -316,25 +316,13 @@ impl<'a> Gpio<'a> {
         self.port.clients[self.index()].set(Some(client));
     }
 
-    pub fn set_client_data(&self, data: usize) {
-        if !self.valid.load(Ordering::Relaxed) {
-            return;
-        }
-
-        self.port.client_data[self.index()].set(data);
-    }
+    fn is_pending(&self) -> bool {
+        self.port.regs().isfr.get() & (1 << self.index()) != 0
+    } 
 }
 
-impl<'a, P: PinNum> hil::Controller for Pin<'a, P> {
-    type Config = functions::Function<P>;
-
-    fn configure(&self, config: Self::Config) {
-        self.claim_as(config);
-    }
-}
-
-impl<'a> hil::Controller for Gpio<'a> {
-    type Config = (hil::gpio::InputMode, hil::gpio::InterruptMode);
+impl hil::Controller for Gpio {
+    type Config = (gpio::FloatingState, gpio::InterruptEdge);
 
     fn configure(&self, config: Self::Config) {
         self.set_input_mode(config.0);
@@ -342,31 +330,85 @@ impl<'a> hil::Controller for Gpio<'a> {
     }
 }
 
-impl<'a> hil::gpio::PinCtl for Gpio<'a> {
-    fn set_input_mode(&self, mode: hil::gpio::InputMode) {
-        Gpio::set_input_mode(self, mode);
+impl gpio::Pin for Gpio {}
+impl gpio::InterruptPin for Gpio {}
+
+impl gpio::Configure for Gpio {
+
+    fn configuration(&self) -> gpio::Configuration {
+        if !self.is_enabled() {
+            gpio::Configuration::Function
+        } else if self.is_output() {
+            gpio::Configuration::Output
+        } else {
+            gpio::Configuration::Input
+        }
     }
+
+    fn make_output(&self) -> gpio::Configuration {
+        self.enable_output();
+        gpio::Configuration::Output
+    }
+
+    fn disable_output(&self) -> gpio::Configuration {
+        self.disable_output();
+        gpio::Configuration::Input
+    }
+
+    fn make_input(&self) -> gpio::Configuration {
+        self.disable_output();
+        gpio::Configuration::Input
+    }
+    
+    fn disable_input(&self) -> gpio::Configuration {
+        self.enable_output();
+        gpio::Configuration::Output
+    }
+
+    fn deactivate_to_low_power(&self) {
+        self.clear_client();
+        let port = self.port.regs();
+        port.pcr[self.index()].modify(PinControl::MUX.val(PeripheralFunction::Alt0 as u32));
+        self.valid.swap(false, Ordering::Relaxed);
+    }
+
+    fn set_floating_state(&self, state: gpio::FloatingState) {
+        Gpio::set_input_mode(self, state);
+    }
+
+    fn floating_state(&self) -> gpio::FloatingState {
+        let pe = self.port.regs().pcr[self.index()].read(PinControl::PE);
+        let ps = self.port.regs().pcr[self.index()].read(PinControl::PS);
+        if pe == 0 {
+            gpio::FloatingState::PullNone
+        } else if ps == 0 {
+            gpio::FloatingState::PullDown
+        }
+        else {
+            gpio::FloatingState::PullUp
+        }
+
+    }
+
+    fn is_input(&self) -> bool {
+        self.is_output() == false
+    }
+
+    fn is_output(&self) -> bool {
+        self.is_output()
+    }
+
 }
 
-impl<'a> hil::gpio::Pin for Gpio<'a> {
-    fn disable(&self) {
-        unimplemented!();
-    }
-
-    fn make_output(&self) {
-        self.enable_output();
-    }
-
-    fn make_input(&self) {
-        self.disable_output();
-    }
-
+impl gpio::Input for Gpio {
     fn read(&self) -> bool {
         self.read()
     }
+}
 
-    fn toggle(&self) {
-        self.toggle();
+impl gpio::Output for Gpio {
+    fn toggle(&self) -> bool {
+        self.toggle()
     }
 
     fn set(&self) {
@@ -376,15 +418,25 @@ impl<'a> hil::gpio::Pin for Gpio<'a> {
     fn clear(&self) {
         self.clear();
     }
+}
 
-    fn enable_interrupt(&self, client_data: usize, mode: hil::gpio::InterruptMode) {
-        Gpio::enable_interrupt(self);
-        self.set_interrupt_mode(mode);
-        self.set_client_data(client_data);
+impl gpio::Interrupt for Gpio {
+
+    fn set_client(&self, client: &'static dyn gpio::Client) {
+        self.set_client(client);
     }
 
-    fn disable_interrupt(&self) {
+    fn enable_interrupts(&self, mode: gpio::InterruptEdge) {
+        Gpio::enable_interrupt(self);
+        self.set_interrupt_mode(mode);
+    }
+
+    fn disable_interrupts(&self) {
         Gpio::disable_interrupt(self);
+    }
+
+    fn is_pending(&self) -> bool {
+        Gpio::is_pending(self)
     }
 }
 

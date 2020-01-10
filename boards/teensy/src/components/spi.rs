@@ -1,5 +1,5 @@
 use capsules::virtual_spi::{VirtualSpiMasterDevice, MuxSpiMaster};
-use components::Component;
+use kernel::component::Component;
 use kernel::hil::spi::SpiMaster;
 use kernel::static_init;
 use mk66;
@@ -16,9 +16,10 @@ impl VirtualSpiComponent {
 }
 
 impl Component for VirtualSpiComponent {
+    type StaticInput = ();
     type Output = &'static Spi<'static, VirtualSpiMasterDevice<'static, mk66::spi::Spi<'static>>>;
 
-    unsafe fn finalize(&mut self) -> Option<Self::Output> {
+    unsafe fn finalize(&mut self, _s: Self::StaticInput) -> Self::Output {
         mk66::spi::SPI0.init();
         mk66::spi::SPI1.init();
         mk66::spi::SPI2.init();
@@ -61,6 +62,6 @@ impl Component for VirtualSpiComponent {
         virtual_spi[1].set_client(spi);
         virtual_spi[2].set_client(spi);
 
-        Some(spi)
+        spi
     }
 }

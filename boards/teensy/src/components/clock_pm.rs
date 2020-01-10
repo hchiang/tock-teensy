@@ -24,7 +24,7 @@ pub struct ClockManagerComponent {
 }
 
 impl ClockManagerComponent {
-    pub fn new(chip_configs: &'static dyn kernel::hil::clock_pm::ClockConfigs) -> ClockManagerComponent {
+    pub fn new(chip_configs: &'static dyn kernel::hil::clock_pm::ClockConfigs) -> Self {
         ClockManagerComponent {
             chip_configs: chip_configs,
         }

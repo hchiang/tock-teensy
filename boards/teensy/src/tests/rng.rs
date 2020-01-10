@@ -6,7 +6,7 @@ use tests::alarm;
 struct RngTest;
 
 impl Client32 for RngTest {
-    fn entropy_available(&self, entropy: &mut Iterator<Item = u32>,
+    fn entropy_available(&self, entropy: &mut dyn Iterator<Item = u32>,
                          error: ReturnCode) -> Continue {
         match error {
             ReturnCode::SUCCESS => {
