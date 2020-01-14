@@ -35,5 +35,5 @@ target/$(TARGET)/release/$(PLATFORM)-$(APP_NAME): target/$(TARGET)/release/$(PLA
 target/$(TARGET)/release/$(PLATFORM)-$(APP_NAME).elf: target/$(TARGET)/release/$(PLATFORM)-$(APP_NAME)
 	$(Q)cp $^ $@
 
-target/$(TARGET)/release/$(PLATFORM)-$(APP_NAME).hex: target/$(TARGET)/release/$(PLATFORM)-$(APP_NAME).elf
+target/$(TARGET)/release/$(PLATFORM).hex: target/$(TARGET)/release/$(PLATFORM).elf
 	$(Q)$(OBJCOPY) -Oihex $^ $@
