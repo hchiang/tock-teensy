@@ -112,8 +112,6 @@ pub unsafe fn reset_handler() {
     //let xconsole = XConsoleComponent::new().finalize(());
     let rng = RngaComponent::new(board_kernel).finalize(());
 
-    let clock_manager = ClockManagerComponent::new(&mk66::clock_pm::CM).finalize(());
-    
     let teensy = Teensy {
         //xconsole: xconsole,
         gpio: gpio,
@@ -147,6 +145,6 @@ pub unsafe fn reset_handler() {
         &process_mgmt_cap,
     );
     
-    board_kernel.kernel_loop(&teensy, chip, Some(&teensy.ipc), &main_cap, clock_manager);
+    board_kernel.kernel_loop(&teensy, chip, Some(&teensy.ipc), &main_cap);
 }
 

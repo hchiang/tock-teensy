@@ -1,4 +1,3 @@
-mod clock_pm;
 mod gpio;
 mod led;
 mod spi;
@@ -7,7 +6,6 @@ mod console;
 //mod xconsole;
 mod rnga;
 
-pub use self::clock_pm::ClockManagerComponent;
 pub use self::gpio::GpioComponent;
 pub use self::led::LedComponent;
 pub use self::spi::VirtualSpiComponent;
