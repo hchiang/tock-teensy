@@ -17,4 +17,5 @@ lto = true
 kernel = { path = "../../tock/kernel" }
 cortexm4 = { path = "../../tock/arch/cortex-m4" }
 capsules = { path = "../../tock/capsules" }
+components = { path = "../../tock/boards/components" }
 mk66 = { path = "../../chips/mk66/" }
