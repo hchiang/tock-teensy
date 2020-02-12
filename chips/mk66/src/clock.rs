@@ -78,9 +78,9 @@ pub fn configure(core_freq: u32) {
         osc::enable(mcg::xtals::Teensy16MHz);
         sim::set_dividers(1, bus_div, flash_div);
 
-        let fbe = fei.use_xtal(mcg::xtals::Teensy16MHz);
-        let pbe = fbe.enable_pll(pll_mul, pll_div);
-        pbe.use_pll();
+        let fbe = fei.to_fbe(mcg::xtals::Teensy16MHz);
+        let pbe = fbe.to_pbe(pll_mul, pll_div);
+        pbe.to_pee();
 
         unsafe {
             MCGOUTCLK = core_freq * MHz;

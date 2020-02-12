@@ -16,7 +16,7 @@ pub struct Registers {
     _reserved1: ReadOnly<u8>,
     pub atcvh: ReadWrite<u8>,
     pub atcvl: ReadWrite<u8>,
-    pub c7: ReadWrite<u8>,
+    pub c7: ReadWrite<u8, Control7::Register>,
     pub c8: ReadWrite<u8>,
     pub c9: ReadWrite<u8>,
     _reserved2: ReadOnly<u8>,
@@ -129,6 +129,14 @@ register_bitfields![u8,
         IRCST OFFSET(0) NUMBITS(1) [
             Slow = 0,
             Fast = 1
+        ]
+    ],
+
+    Control7 [
+        OSCSEL OFFSET(0) NUMBITS(2) [
+            Oscillator = 0,
+            RTC32K = 1,
+            IRC48M = 2
         ]
     ]
 ];
