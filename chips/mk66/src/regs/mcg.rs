@@ -7,7 +7,7 @@ pub struct Registers {
     pub c1: ReadWrite<u8, Control1::Register>,
     pub c2: ReadWrite<u8, Control2::Register>,
     pub c3: ReadWrite<u8>,
-    pub c4: ReadWrite<u8>,
+    pub c4: ReadWrite<u8, Control4::Register>,
     pub c5: ReadWrite<u8, Control5::Register>,
     pub c6: ReadWrite<u8, Control6::Register>,
     pub s: ReadOnly<u8, Status::Register>,
@@ -78,6 +78,18 @@ register_bitfields![u8,
             SlowInternal = 0,
             FastInternal = 1
         ]
+    ],
+
+    Control4 [
+        DMX32 OFFSET(7) NUMBITS(1) [],
+        DRST_DRS OFFSET(5) NUMBITS(2) [
+            Low = 0,
+            Mid = 1,
+            MidHigh = 2,
+            High = 3
+        ],
+        FCTRIM OFFSET(1) NUMBITS(4) [],
+        SCFTRIM OFFSET(0) NUMBITS(1) []
     ],
 
     Control5 [

@@ -71,12 +71,78 @@ pub fn state() -> State {
     }
 }
 
+//TODO bus and flash dividers
+fn set_pll_freq(freq: u32) {
+    let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
+
+    let (pll_mul, pll_div) = match freq {
+        16 => (16, 8),
+        20 => (20, 8),
+        24 => (24, 8),
+        28 => (28, 8),
+
+        32 => (16, 4),
+        36 => (18, 4),
+        40 => (20, 4),
+        44 => (22, 4),
+        48 => (24, 4),
+        52 => (26, 4),
+        56 => (28, 4),
+        60 => (30, 4),
+
+        64 => (16, 2),
+        68 => (17, 2),
+        72 => (18, 2),
+        76 => (19, 2),
+        80 => (20, 2),
+        84 => (21, 2),
+        88 => (22, 2),
+        92 => (23, 2),
+        96 => (24, 2),
+        100 => (25, 2),
+        104 => (26, 2),
+        108 => (27, 2),
+        112 => (28, 2),
+        116 => (29, 2),
+        120 => (30, 2),
+        _ => panic!("Invalid pll frequency selected!")
+    };
+
+    mcg.c5.modify(Control5::PRDIV.val(pll_div - 1));
+
+    mcg.c6.modify(Control6::VDIV.val(pll_mul - 16));
+}
+
+pub fn set_fll_freq(freq: u32) {
+    let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
+
+    let drs_val = match freq {
+        24 => 0,
+        48 => 1,
+        72 => 2,
+        96 => 4,
+        _ => panic!("Invalid fll frequency selected!")
+    };
+
+    match state() {
+        State::Fei(Fei) | State::Fbi(Fbi) => {
+            mcg.c4.modify(Control4::DRST_DRS.val(drs_val as u8))
+        }
+        State::Fee(Fee) | State::Fbe(Fbe) => {
+            mcg.c4.modify(Control4::DRST_DRS.val(drs_val as u8) +
+                          Control4::DMX32::SET);
+        }
+        _ => {}
+    };
+}
+
 pub enum OscClock {
     Oscillator,
     RTC32K,
     IRC48M,
 }
 
+#[derive(Copy,Clone)]
 pub enum Ircs {
     SlowInternal,
     FastInternal,
@@ -90,7 +156,7 @@ pub struct Xtal {
 }
 
 pub mod xtals {
-    use mcg::{OscClock, Ircs, Xtal, OscRange, Frdiv};
+    use mcg::{OscClock, Xtal, OscRange, Frdiv};
     use osc::OscCapacitance;
 
     #[allow(non_upper_case_globals)]
@@ -100,9 +166,24 @@ pub mod xtals {
         frdiv: Frdiv::Low16_High512,
         load: OscCapacitance::Load_10pF
     };
+
+    #[allow(non_upper_case_globals)]
+    pub const Teensy32KHz: Xtal = Xtal {
+        clock: OscClock::RTC32K,
+        range: OscRange::Low,
+        frdiv: Frdiv::Low1_High32,
+        load: OscCapacitance::Load_10pF
+    };
+
+    #[allow(non_upper_case_globals)]
+    pub const Teensy48MHz: Xtal = Xtal {
+        clock: OscClock::IRC48M,
+        range: OscRange::VeryHigh,
+        frdiv: Frdiv::Low128_High1536,
+        load: OscCapacitance::Load_10pF
+    };
 }
 
-//TODO c4 divider for FLL
 // Source: https://branan.github.io/teensy/2017/01/28/uart.html
 impl Fei {
     pub fn to_fbi(self, ircs: Ircs) -> Fbi {
@@ -170,7 +251,7 @@ impl Fee {
 
         mcg.c1.modify(Control1::CLKS::Internal + Control1::IREFS::SlowInternal);
 
-        while !mcg.s.matches_all(Status::IREFST::Internal + Status::CLKST::Internal) {}
+        while !mcg.s.matches_all(Status::IRCST.val(ircs as u8) + Status::IREFST::Internal + Status::CLKST::Internal) {}
     
         Fbi {}
     }
@@ -242,20 +323,12 @@ impl Fbi {
 }
 
 impl Fbe {
-    pub fn to_pbe(self, multiplier: u8, divider: u8) -> Pbe {
+    pub fn to_pbe(self, freq: u32) -> Pbe {
         let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
 
-        if multiplier < 16 || multiplier > 47 {
-            panic!("Invalid PLL VCO divide factor: {}", multiplier);
-        }
-        if divider < 1 || divider > 8 {
-            panic!("Invalid PLL reference divide factor: {}", divider);
-        }
+        set_pll_freq(freq);
 
-        mcg.c5.modify(Control5::PRDIV.val(divider - 1));
-
-        mcg.c6.modify(Control6::VDIV.val(multiplier - 16) +
-                      Control6::PLLS::SET);
+        mcg.c6.modify(Control6::PLLS::SET);
 
         // Wait for PLL to be selected and stable PLL lock
         while !mcg.s.matches_all(Status::PLLST::PllcsOutput + Status::LOCK0::SET) {}
@@ -332,16 +405,10 @@ impl Pbe {
 }
 
 impl Pee {
-    pub fn to_pbe(self, xtal: Xtal) -> Pbe {
+    pub fn to_pbe(self) -> Pbe {
         let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
 
-        mcg.c2.modify(Control2::RANGE.val(xtal.range as u8) +
-                      Control2::EREFS::SET);
-
-        mcg.c7.modify(Control7::OSCSEL.val(xtal.clock as u8));
-
-        mcg.c1.modify(Control1::CLKS::External +
-                      Control1::FRDIV.val(xtal.frdiv as u8));
+        mcg.c1.modify(Control1::CLKS::External);
 
         while !mcg.s.matches_all(Status::CLKST::External) {}
 
@@ -373,20 +440,12 @@ impl Blpe {
         
         Fbe {}
     }
-    pub fn to_pbe(self, multiplier: u8, divider: u8) -> Pbe {
+    pub fn to_pbe(self, freq: u32) -> Pbe {
         let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
 
-        if multiplier < 16 || multiplier > 47 {
-            panic!("Invalid PLL VCO divide factor: {}", multiplier);
-        }
-        if divider < 1 || divider > 8 {
-            panic!("Invalid PLL reference divide factor: {}", divider);
-        }
+        set_pll_freq(freq);
 
-        mcg.c5.modify(Control5::PRDIV.val(divider - 1));
-
-        mcg.c6.modify(Control6::VDIV.val(multiplier - 16) +
-                      Control6::PLLS::SET);
+        mcg.c6.modify(Control6::PLLS::SET);
 
         mcg.c2.modify(Control2::LP::CLEAR);
 
