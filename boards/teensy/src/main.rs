@@ -4,7 +4,7 @@
 
 extern crate capsules;
 
-#[macro_use(debug, static_init, register_bitfields, register_bitmasks)]
+#[macro_use(debug, debug_gpio, static_init, register_bitfields, register_bitmasks)]
 extern crate kernel;
 
 #[allow(dead_code)]
@@ -84,6 +84,12 @@ pub unsafe fn reset_handler() {
     mk66::sim::clocks::PORTABCDE.enable();
 
     let (gpio_pins, led_pins) = pins::configure_all_pins();
+    kernel::debug::assign_gpios(Some(gpio_pins[24]), Some(gpio_pins[25]), None);
+    debug_gpio!(0, make_output);
+    debug_gpio!(0, clear);
+    debug_gpio!(1, make_output);
+    debug_gpio!(1, clear);
+
     let gpio = GpioComponent::new()
                              .dependency(gpio_pins)
                              .finalize().unwrap();
