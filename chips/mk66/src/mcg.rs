@@ -75,6 +75,7 @@ pub fn state() -> State {
 fn set_pll_freq(freq: u32) {
     let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
 
+    //TODO divisor PRDIV for IRC48MHz
     let (pll_mul, pll_div) = match freq {
         16 => (16, 8),
         20 => (20, 8),
@@ -136,6 +137,9 @@ pub fn set_fll_freq(freq: u32) {
     };
 }
 
+//TODO FCRDIV can divide freq of internal reference clock
+// modify Ircs to pass in freq?
+
 pub enum OscClock {
     Oscillator,
     RTC32K,
@@ -195,6 +199,8 @@ impl Fei {
 
         mcg.c2.modify(Control2::IRCS.val(ircs as u8));
 
+        mcg.sc.modify(StatusControl::FCRDIV.val(0 as u8));
+
         Fbi {}        
     }
     pub fn to_fee(self, xtal: Xtal) -> Fee {
@@ -252,6 +258,8 @@ impl Fee {
         mcg.c1.modify(Control1::CLKS::Internal + Control1::IREFS::SlowInternal);
 
         while !mcg.s.matches_all(Status::IRCST.val(ircs as u8) + Status::IREFST::Internal + Status::CLKST::Internal) {}
+
+        mcg.sc.modify(StatusControl::FCRDIV.val(0 as u8));
     
         Fbi {}
     }
@@ -371,6 +379,8 @@ impl Fbe {
         while !mcg.s.matches_all(Status::IREFST::Internal + Status::CLKST::Internal) {}
 
         mcg.c2.modify(Control2::IRCS.val(ircs as u8));
+
+        mcg.sc.modify(StatusControl::FCRDIV.val(0 as u8));
 
         Fbi {}
     }

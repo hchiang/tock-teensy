@@ -12,7 +12,7 @@ pub struct Registers {
     pub c6: ReadWrite<u8, Control6::Register>,
     pub s: ReadOnly<u8, Status::Register>,
     _reserved0: ReadOnly<u8>,
-    pub sc: ReadWrite<u8>,
+    pub sc: ReadWrite<u8, StatusControl::Register>,
     _reserved1: ReadOnly<u8>,
     pub atcvh: ReadWrite<u8>,
     pub atcvl: ReadWrite<u8>,
@@ -142,6 +142,15 @@ register_bitfields![u8,
             Slow = 0,
             Fast = 1
         ]
+    ],
+
+    StatusControl [
+        ATME OFFSET(7) NUMBITS(1) [],
+        ATMS OFFSET(6) NUMBITS(1) [],
+        ATMF OFFSET(5) NUMBITS(1) [],
+        FLTPRSRV OFFSET(4) NUMBITS(1) [],
+        FCRDIV OFFSET(1) NUMBITS(3) [],
+        LOCS0 OFFSET(0) NUMBITS(1) []
     ],
 
     Control7 [
