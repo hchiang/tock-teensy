@@ -7,7 +7,7 @@
 extern crate cortexm4;
 
 #[allow(unused_imports)]
-#[macro_use(debug, register_bitfields, register_bitmasks)]
+#[macro_use(debug, debug_gpio, register_bitfields, register_bitmasks)]
 extern crate kernel;
 
 #[allow(dead_code)]
