@@ -29,6 +29,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 name = "capsules"
 version = "0.1.0"
 dependencies = [
+ "enum_primitive 0.1.0",
  "kernel 0.1.0",
 ]
 
@@ -56,6 +57,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "enum_primitive"
+version = "0.1.0"
+
+[[package]]
 name = "fake-simd"
 version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -72,7 +77,8 @@ dependencies = [
 name = "kernel"
 version = "0.1.0"
 dependencies = [
- "tock-regs 0.1.0",
+ "tock-cells 0.1.0",
+ "tock-registers 0.3.0",
 ]
 
 [[package]]
@@ -114,8 +120,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "tock-regs"
+name = "tock-cells"
 version = "0.1.0"
+
+[[package]]
+name = "tock-registers"
+version = "0.3.0"
 
 [[package]]
 name = "twofish"

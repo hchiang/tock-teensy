@@ -13,15 +13,13 @@ extern crate mk66;
 pub mod io;
 
 #[allow(dead_code)]
+mod components;
+
+#[allow(dead_code)]
 mod tests;
 
 #[allow(dead_code)]
 mod spi;
-
-#[allow(dead_code)]
-mod components;
-
-//pub mod xconsole;
 
 #[allow(dead_code)]
 mod pins;
@@ -43,7 +41,7 @@ static mut PROCESSES: [Option<&'static kernel::procs::ProcessType>; NUM_PROCS] =
 
 #[allow(unused)]
 struct Teensy {
-    //xconsole: <XConsoleComponent as Component>::Output,
+    console: <ConsoleComponent as Component>::Output,
     gpio: <GpioComponent as Component>::Output,
     led: <LedComponent as Component>::Output,
     alarm: <AlarmComponent as Component>::Output,
@@ -57,7 +55,7 @@ impl kernel::Platform for Teensy {
         where F: FnOnce(Option<&kernel::Driver>) -> R
     {
         match driver_num {
-            //xconsole::DRIVER_NUM => f(Some(self.xconsole)),
+            capsules::console::DRIVER_NUM => f(Some(self.console)),
             capsules::gpio::DRIVER_NUM => f(Some(self.gpio)),
 
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
@@ -110,12 +108,14 @@ pub unsafe fn reset_handler() {
                            .finalize().unwrap();
     let spi = VirtualSpiComponent::new().finalize().unwrap();
     let alarm = AlarmComponent::new(board_kernel).finalize().unwrap();
-    //let xconsole = XConsoleComponent::new().finalize().unwrap();
+    let uart_mux = UartMuxComponent::new(&mk66::uart::UART0, 115200).finalize().unwrap();
+    let console = ConsoleComponent::new(board_kernel, uart_mux).finalize().unwrap();
+    DebugWriterComponent::new(uart_mux).finalize();
     let rng = RngaComponent::new(board_kernel).finalize().unwrap();
 
     
     let teensy = Teensy {
-        //xconsole: xconsole,
+        console: console,
         gpio: gpio,
         led: led,
         alarm: alarm,
