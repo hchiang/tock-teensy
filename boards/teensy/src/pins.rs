@@ -33,6 +33,12 @@ pub unsafe fn configure_all_pins() -> (&'static [&'static dyn gpio::InterruptVal
          PD15.claim_as_gpio(), PD11.claim_as_gpio(), PE10.claim_as_gpio(),
          PE11.claim_as_gpio()]);
 
+    kernel::debug::assign_gpios(Some(gpio_pins[24]), Some(gpio_pins[25]), None);
+    debug_gpio!(0, make_output);
+    debug_gpio!(0, clear);
+    debug_gpio!(1, make_output);
+    debug_gpio!(1, clear);
+
     let led_pins = static_init!(
             [(&'static dyn gpio::Pin, ActivationMode); 1],
             [(gpio_pins[13] as &'static dyn gpio::Pin, ActivationMode::ActiveHigh)]

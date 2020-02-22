@@ -4,6 +4,7 @@
 
 extern crate capsules;
 
+#[macro_use(debug_gpio)]
 extern crate kernel;
 
 extern crate components;
