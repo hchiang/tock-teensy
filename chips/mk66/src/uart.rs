@@ -148,7 +148,7 @@ register_bitfields! {u8,
 }
 
 
-pub struct Uart<'a> {
+pub struct UART<'a> {
     index: usize,
     registers: *mut Registers,
     receive_client: OptionalCell<&'a dyn uart::ReceiveClient>,
@@ -158,15 +158,15 @@ pub struct Uart<'a> {
     rx_index: Cell<usize>
 }
 
-pub static mut UART0: Uart = Uart::new(0);
-pub static mut UART1: Uart = Uart::new(1);
-pub static mut UART2: Uart = Uart::new(2);
-pub static mut UART3: Uart = Uart::new(3);
-pub static mut UART4: Uart = Uart::new(4);
+pub static mut UART0: UART = UART::new(0);
+pub static mut UART1: UART = UART::new(1);
+pub static mut UART2: UART = UART::new(2);
+pub static mut UART3: UART = UART::new(3);
+pub static mut UART4: UART = UART::new(4);
 
-impl<'a> Uart<'a> {
-    const fn new(index: usize) -> Uart<'a> {
-        Uart {
+impl<'a> UART<'a> {
+    const fn new(index: usize) -> UART<'a> {
+        UART {
             index: index,
             registers: UART_BASE_ADDRS[index],
             receive_client: OptionalCell::empty(),
@@ -311,8 +311,10 @@ impl<'a> Uart<'a> {
 }
 
 
+impl<'a> uart::Uart<'a> for UART<'a> {}
+
 /// Implementation of kernel::hil::UART
-impl<'a> hil::uart::Transmit<'a> for Uart<'a> {
+impl<'a> uart::Transmit<'a> for UART<'a> {
     fn set_transmit_client(&self, client: &'a dyn hil::uart::TransmitClient) {
         self.transmit_client.replace(client);
     }
@@ -342,7 +344,7 @@ impl<'a> hil::uart::Transmit<'a> for Uart<'a> {
     }
 }
 
-impl<'a> hil::uart::Configure for Uart<'a> {
+impl<'a> uart::Configure for UART<'a> {
     fn configure(&self, params: hil::uart::Parameters) -> ReturnCode {
         self.enable_clock();
 
@@ -357,7 +359,7 @@ impl<'a> hil::uart::Configure for Uart<'a> {
     }
 }
 
-impl<'a> hil::uart::Receive<'a> for Uart<'a> {
+impl<'a> uart::Receive<'a> for UART<'a> {
     fn receive_buffer(&self, rx_buffer: &'static mut [u8], rx_len: usize) -> (ReturnCode, Option<&'static mut [u8]>) {
         let length = rx_len;
         if rx_len > rx_buffer.len() {
