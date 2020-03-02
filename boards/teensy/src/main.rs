@@ -32,6 +32,7 @@ use components::*;
 #[allow(unused)]
 struct Teensy {
     xconsole: <XConsoleComponent as Component>::Output,
+    adc: <AdcComponent as Component>::Output,
     gpio: <GpioComponent as Component>::Output,
     led: <LedComponent as Component>::Output,
     alarm: <AlarmComponent as Component>::Output,
@@ -46,6 +47,7 @@ impl kernel::Platform for Teensy {
     {
         match driver_num {
             xconsole::DRIVER_NUM => f(Some(self.xconsole)),
+            capsules::adc::DRIVER_NUM => f(Some(self.adc)),
             capsules::gpio::DRIVER_NUM => f(Some(self.gpio)),
 
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
@@ -90,6 +92,7 @@ pub unsafe fn reset_handler() {
     debug_gpio!(1, make_output);
     debug_gpio!(1, clear);
 
+    let adc = AdcComponent::new().finalize().unwrap();
     let gpio = GpioComponent::new()
                              .dependency(gpio_pins)
                              .finalize().unwrap();
@@ -103,6 +106,7 @@ pub unsafe fn reset_handler() {
 
     let teensy = Teensy {
         xconsole: xconsole,
+        adc: adc,
         gpio: gpio,
         led: led,
         alarm: alarm,

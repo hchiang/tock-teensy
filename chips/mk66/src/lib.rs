@@ -17,7 +17,9 @@ extern crate sha2;
 extern crate twofish;
 extern crate block_cipher_trait;
 
+pub mod adc;
 pub mod chip;
+pub mod dma;
 pub mod nvic;
 pub mod wdog;
 pub mod gpio;

@@ -5,6 +5,8 @@ use spi;
 use gpio;
 use uart;
 use mpu;
+use dma;
+use adc;
 
 pub struct MK66 {
     pub mpu: mpu::Mpu,
@@ -14,7 +16,12 @@ pub struct MK66 {
 impl MK66 {
     pub unsafe fn new() -> MK66 {
         // Set up DMA channels
-        // TODO: implement
+        // TODO implement
+        adc::ADC0.set_dma(&mut dma::DMA_CHANNELS[0]);
+        dma::DMA_CHANNELS[0].initialize(&mut adc::ADC0, dma::DMAPeripheral::ADC0);
+
+        adc::ADC1.set_dma(&mut dma::DMA_CHANNELS[1]);
+        dma::DMA_CHANNELS[1].initialize(&mut adc::ADC1, dma::DMAPeripheral::ADC1);
 
         MK66 {
             mpu: mpu::Mpu::new(),
@@ -32,6 +39,9 @@ impl Chip for MK66 {
         unsafe {
             while let Some(interrupt) = cortexm4::nvic::next_pending() {
                 match interrupt {
+                    DMA0 => dma::DMA_CHANNELS[0].handle_interrupt(dma::DMAPeripheral::ADC0),
+                    DMA1 => dma::DMA_CHANNELS[1].handle_interrupt(dma::DMAPeripheral::ADC1),
+
                     PCMA => gpio::PA.handle_interrupt(),
                     PCMB => gpio::PB.handle_interrupt(),
                     PCMC => gpio::PC.handle_interrupt(),

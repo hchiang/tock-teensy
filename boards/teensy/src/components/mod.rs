@@ -8,6 +8,7 @@ pub trait ComponentWithDependency<D>: Component {
     fn dependency(&mut self, _dep: D) -> &mut Self { self }
 }
 
+mod adc;
 mod gpio;
 mod led;
 mod spi;
@@ -16,6 +17,7 @@ mod console;
 mod xconsole;
 mod rnga;
 
+pub use self::adc::AdcComponent;
 pub use self::gpio::GpioComponent;
 pub use self::led::LedComponent;
 pub use self::spi::VirtualSpiComponent;
