@@ -40,6 +40,10 @@ const FAULT_RESPONSE: kernel::procs::FaultResponse = kernel::procs::FaultRespons
 
 static mut PROCESSES: [Option<&'static dyn kernel::procs::ProcessType>; NUM_PROCS] = [None; NUM_PROCS];
 
+#[no_mangle]
+#[link_section = ".stack_buffer"]
+pub static mut STACK_MEMORY: [u8; 0x2000] = [0; 0x2000];
+
 #[allow(unused)]
 struct Teensy {
     console: <ConsoleComponent as Component>::Output,
