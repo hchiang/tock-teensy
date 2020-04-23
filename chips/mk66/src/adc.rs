@@ -139,6 +139,7 @@ impl<C: hil::adc::Client + hil::adc::HighSpeedClient> EverythingClient for C {}
 /// ADC driver code for the SAM4L.
 pub struct Adc {
     registers: StaticRef<AdcRegisters>,
+    index: usize,
 
     // state tracking for the ADC
     adc_clk_freq: Cell<u32>,
@@ -353,29 +354,29 @@ register_bitfields![u32,
 ];
 
 // Page 957 of K66 data sheet
-const ADC0_BASE_ADDRESS: StaticRef<AdcRegisters> =
-    unsafe { StaticRef::new(0x4003B000 as *const AdcRegisters) };
-const ADC1_BASE_ADDRESS: StaticRef<AdcRegisters> =
-    unsafe { StaticRef::new(0x400BB000 as *const AdcRegisters) };
+pub const ADC_ADDRS: [StaticRef<AdcRegisters>; 2] = [
+    unsafe { StaticRef::new(0x4003_B000 as *const AdcRegisters)},
+    unsafe { StaticRef::new(0x400B_B000 as *const AdcRegisters)}];
 
 /// Statically allocated ADC driver. Used in board configurations to connect to
 /// various capsules.
-pub static mut ADC0: Adc = Adc::new(ADC0_BASE_ADDRESS, dma::DMAPeripheral::ADC0);
-pub static mut ADC1: Adc = Adc::new(ADC1_BASE_ADDRESS, dma::DMAPeripheral::ADC1);
+pub static mut ADC0: Adc = Adc::new(0, dma::DMAPeripheral::ADC0);
+pub static mut ADC1: Adc = Adc::new(1, dma::DMAPeripheral::ADC1);
 
 /// Functions for initializing the ADC.
 impl Adc {
     /// Create a new ADC driver.
     ///
-    /// - `base_address`: pointer to the ADC's memory mapped I/O registers
+    /// - `index`: which ADC
     /// - `rx_dma_peripheral`: type used for DMA transactions
     const fn new(
-        base_address: StaticRef<AdcRegisters>,
+        index: usize,
         rx_dma_peripheral: dma::DMAPeripheral,
     ) -> Adc {
         Adc {
             // pointer to memory mapped I/O registers
-            registers: base_address,
+            registers: ADC_ADDRS[index],
+            index: index,
 
             // status of the ADC peripheral
             adc_clk_freq: Cell::new(0),
@@ -410,6 +411,15 @@ impl Adc {
         self.rx_dma.set(Some(rx_dma));
     }
 
+    pub fn enable_clock(&self) {
+        use sim::{clocks, Clock};
+        match self.index {
+            0 => clocks::ADC0.enable(),
+            1 => clocks::ADC1.enable(),
+            _ => unreachable!()
+        };
+    }
+
     /// Calibrate the adc
     /// clock and frequency, sample time, high speed configuration must be set before calibration
     pub fn calibrate(&self) -> ReturnCode {
@@ -419,7 +429,7 @@ impl Adc {
         regs.sc2.write(StatusControl2::ADTRG::Software);
 
         // start calibration
-        regs.sc3.modify(StatusControl3::CAL::SET + StatusControl3::CALF::CLEAR);
+        regs.sc3.modify(StatusControl3::CAL::SET + StatusControl3::CALF::SET);
 
         while !regs.sc1a.is_set(Control::COCO) {}
 
@@ -510,6 +520,7 @@ impl hil::adc::Adc for Adc {
     /// Enable and configure the ADC.
     /// This can be called multiple times with no side effects.
     fn initialize(&self) -> ReturnCode {
+        self.enable_clock();
         self.calibrate()
     }
 

@@ -1,6 +1,7 @@
 use mk66;
 use capsules::adc;
 use components::Component;
+use kernel::hil::adc::Adc;
 
 pub struct AdcComponent;
 
@@ -14,6 +15,9 @@ impl Component for AdcComponent {
     type Output = &'static adc::Adc<'static, mk66::adc::Adc>;
 
     unsafe fn finalize(&mut self) -> Option<Self::Output> {
+
+    mk66::adc::ADC0.initialize();
+    mk66::adc::ADC1.initialize();
 
     let adc_channels = static_init!(
         [&'static mk66::adc::AdcChannel; 6],
