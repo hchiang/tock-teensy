@@ -42,6 +42,8 @@ impl Chip for MK66 {
                     DMA0 => dma::DMA_CHANNELS[0].handle_interrupt(dma::DMAPeripheral::ADC0),
                     DMA1 => dma::DMA_CHANNELS[1].handle_interrupt(dma::DMAPeripheral::ADC1),
 
+                    ADC0 => adc::ADC0.handle_interrupt(),
+                    ADC1 => adc::ADC1.handle_interrupt(),
                     PCMA => gpio::PA.handle_interrupt(),
                     PCMB => gpio::PB.handle_interrupt(),
                     PCMC => gpio::PC.handle_interrupt(),
