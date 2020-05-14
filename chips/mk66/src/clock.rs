@@ -57,11 +57,9 @@ pub fn configure(core_freq: u32) {
 
         configure_div(core_freq);
 
-        //mcg::set_fll_freq(mcg::FLLFreq::FLL24M);
         let fbe = fei.to_fbe(mcg::xtals::Teensy16MHz);
         let pbe = fbe.to_pbe(core_freq);
         pbe.to_pee();
-
 
     } else {
         // We aren't in FEI mode, meaning that configuration has already occurred.

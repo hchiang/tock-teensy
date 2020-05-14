@@ -7,7 +7,7 @@ PLATFORM=teensy
 TARGET = thumbv7em-none-eabi
 TEENSY_LOADER=teensy_loader_cli
 
-APP ?= examples/spi_tx
+APP ?= examples/adc
 APP_NAME = $(shell basename $(APP))
 
 include ../../tock/boards/Makefile.common

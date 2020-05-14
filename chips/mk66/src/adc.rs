@@ -10,7 +10,7 @@
 
 use clock;
 use core::cell::Cell;
-use core::{cmp, mem, slice};
+use core::cmp;
 use dma;
 use kernel::common::cells::OptionalCell;
 use kernel::common::cells::TakeCell;
@@ -27,6 +27,7 @@ pub struct AdcChannel {
 }
 
 /// K66 ADC channels.
+#[allow(non_camel_case_types)]
 #[derive(Copy, Clone, Debug)]
 #[repr(u8)]
 enum Channel0 {
@@ -57,6 +58,7 @@ enum Channel0 {
     Disabled = 0x31,
 }
 
+#[allow(non_camel_case_types)]
 enum Channel1 {
     ADC1_DP0_DM0 = 0x00, //DP0 is A10, DM0 is A11
     ADC1_SE4b = 0x04, //A16
@@ -619,6 +621,9 @@ impl hil::adc::Adc for Adc {
             regs.sc2.modify(StatusControl2::DMAEN::CLEAR);
             regs.sc1a.modify(Control::AIEN::CLEAR);
 
+            // TODO stop DMA transfer if going
+            //TODO store dma buffer
+
             ReturnCode::SUCCESS
         }
     }
@@ -688,10 +693,12 @@ impl hil::adc::AdcHighSpeed for Adc {
 
             // enable DMA 
             regs.sc2.modify(StatusControl2::DMAEN::SET);
+            // TODO enable edma
 
             // enable end of conversion interrupt and select input channel
             // since software trigger selected, conversion starts following write to sc1a
             regs.sc1a.write(Control::ADCH.val(channel.chan_num));
+        debug_gpio!(1,toggle);
 
             (ReturnCode::SUCCESS, None, None)
         }
@@ -750,17 +757,28 @@ impl hil::adc::AdcHighSpeed for Adc {
 
 /// Implements a client of a DMA.
 impl dma::DMAClient for Adc {
+
+    fn get_transfer_config(&self) -> dma::TransferConfig {
+        let mut config = dma::TransferConfig::new(0x4003B010, 0, 2, self.dma_length.get() as u16);
+        self.dma_buffer.map( |dma_buffer| {
+            config = dma::TransferConfig::new(
+                0x4003B010, (&dma_buffer[0] as *const _) as usize as u32, 2, self.dma_length.get() as u16)
+        });
+        config
+    }
+
     /// Handler for DMA transfer completion.
     ///
     /// - `pid`: the DMA peripheral that is complete
-    fn transfer_done(&self, pid: dma::DMAPeripheral) {
-        // check if this was an RX transfer
-        if pid != self.rx_dma_peripheral {
-            return;
-        }
+    fn transfer_done(&self) -> u32 {
+        //debug_gpio!(1,toggle);
+        0
 
+        /*
         let regs: &AdcRegisters = &*self.registers;
         let status = regs.sc1a.is_set(Control::COCO);
+
+        //TODO disable eDMA
 
         if self.active.get() {
             if status {
@@ -794,6 +812,6 @@ impl dma::DMAClient for Adc {
                     });
                 }
             }
-        }
+        } */
     }
 }
