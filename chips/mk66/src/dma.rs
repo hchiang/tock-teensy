@@ -319,9 +319,16 @@ impl DMAChannel {
 
     pub fn enable(&self) {
         if !self.enabled.get() {
-            self.enabled.set(true);
             //TODO move clocks code out
             use sim::{clocks, Clock};
+
+            //Enable DMAMUX
+            clocks::DMAMUX.enable();
+            let dmamux_registers: &DMAMUXRegisters = &*self.dmamux_registers;
+            dmamux_registers
+                .chcfg
+                .modify(ChannelConfiguration::ENBL::SET + 
+                    ChannelConfiguration::SOURCE.val(self.periph.get().unwrap() as u8)); 
 
             //Configure eDMA
             clocks::DMA.enable();
@@ -357,15 +364,9 @@ impl DMAChannel {
                     BeginningMinorLoopLink::BITER.val(transfer_config.biter));
             });
 
-            //Enable DMAMUX
-            clocks::DMAMUX.enable();
-            let dmamux_registers: &DMAMUXRegisters = &*self.dmamux_registers;
-            dmamux_registers
-                .chcfg
-                .modify(ChannelConfiguration::ENBL::SET + ChannelConfiguration::SOURCE.val(self.periph.get().unwrap() as u8)); 
-
             //Start DMA 
             registers.serq.write(EnableRequest::ERQ.val(self.channel.get()));
+            self.enabled.set(true);
         }
     }
 
