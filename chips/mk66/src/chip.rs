@@ -7,6 +7,7 @@ use uart;
 use mpu;
 use dma;
 use adc;
+use nvic;
 
 pub struct MK66 {
     pub mpu: mpu::Mpu,
@@ -17,13 +18,12 @@ impl MK66 {
     pub unsafe fn new() -> MK66 {
         // Set up DMA channels
         adc::ADC0.set_dma(&mut dma::DMA_CHANNELS[0]);
+        unsafe {nvic::enable(nvic::NvicIdx::DMA0); }
         dma::DMA_CHANNELS[0].initialize(&mut adc::ADC0, dma::DMAPeripheral::ADC0);
-        //TODO move enable out of this module
-        dma::DMA_CHANNELS[0].enable();
 
         adc::ADC1.set_dma(&mut dma::DMA_CHANNELS[1]);
+        unsafe {nvic::enable(nvic::NvicIdx::DMA1); }
         dma::DMA_CHANNELS[1].initialize(&mut adc::ADC1, dma::DMAPeripheral::ADC1);
-        dma::DMA_CHANNELS[1].enable();
 
         MK66 {
             mpu: mpu::Mpu::new(),
@@ -39,11 +39,11 @@ impl Chip for MK66 {
     fn service_pending_interrupts(&mut self) {
         use nvic::*;
         unsafe {
-                debug_gpio!(0,toggle);
             while let Some(interrupt) = cortexm4::nvic::next_pending() {
                 match interrupt {
                     DMA0 => dma::DMA_CHANNELS[0].handle_interrupt(),
                     DMA1 => dma::DMA_CHANNELS[1].handle_interrupt(),
+                    //DMAERR => dma::DMA_CHANNELS[0].handle_interrupt(),
 
                     ADC0 => adc::ADC0.handle_interrupt(),
                     ADC1 => adc::ADC1.handle_interrupt(),

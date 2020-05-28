@@ -10,7 +10,7 @@
 
 use clock;
 use core::cell::Cell;
-use core::cmp;
+use core::{cmp, mem, slice};
 use dma;
 use kernel::common::cells::OptionalCell;
 use kernel::common::cells::TakeCell;
@@ -149,13 +149,12 @@ pub struct Adc {
     continuous: Cell<bool>,
 
     // DMA peripheral, buffers, and length
-    rx_dma: Cell<Option<&'static dma::DMAChannel>>,
+    rx_dma: OptionalCell<&'static dma::DMAChannel>,
     rx_dma_peripheral: dma::DMAPeripheral,
-    dma_buffer: TakeCell<'static, [u16]>,
-    dma_buffer_idx: Cell<usize>,
-    dma_length: Cell<usize>,
+    rx_length: Cell<usize>,
     next_dma_buffer: TakeCell<'static, [u16]>,
     next_dma_length: Cell<usize>,
+    stopped_buffer: TakeCell<'static, [u16]>,
 
     // ADC client to send sample complete notifications to
     client: OptionalCell<&'static EverythingClient>,
@@ -386,13 +385,12 @@ impl Adc {
             continuous: Cell::new(false),
 
             // DMA status and stuff
+            rx_dma: OptionalCell::empty(),
             rx_dma_peripheral: rx_dma_peripheral,
-            rx_dma: Cell::new(None),
-            dma_buffer: TakeCell::empty(),
-            dma_buffer_idx: Cell::new(0),
-            dma_length: Cell::new(0),
+            rx_length: Cell::new(0),
             next_dma_buffer: TakeCell::empty(),
             next_dma_length: Cell::new(0),
+            stopped_buffer: TakeCell::empty(),
 
             // higher layer to send responses to
             client: OptionalCell::empty(),
@@ -410,7 +408,7 @@ impl Adc {
     ///
     /// - `rx_dma`: reference to the DMA channel the ADC should use
     pub fn set_dma(&self, rx_dma: &'static dma::DMAChannel) {
-        self.rx_dma.set(Some(rx_dma));
+        self.rx_dma.set(rx_dma);
     }
 
     pub fn enable_clock(&self) {
@@ -621,8 +619,26 @@ impl hil::adc::Adc for Adc {
             regs.sc2.modify(StatusControl2::DMAEN::CLEAR);
             regs.sc1a.modify(Control::AIEN::CLEAR);
 
-            // TODO stop DMA transfer if going
-            //TODO store dma buffer
+            // stop DMA transfer if going. This should safely return a None if
+            // the DMA was not being used
+            let dma_buffer = self.rx_dma.map_or(None, |rx_dma| {
+                let dma_buf = rx_dma.abort_transfer();
+                rx_dma.disable();
+                dma_buf
+            });
+            self.rx_length.set(0);
+
+            // store the buffer if it exists
+            dma_buffer.map(|dma_buf| {
+                // change buffer back into a [u16]
+                // the buffer was originally a [u16] so this should be okay
+                let buf_ptr = unsafe { mem::transmute::<*mut u8, *mut u16>(dma_buf.as_mut_ptr()) };
+                let buf = unsafe { slice::from_raw_parts_mut(buf_ptr, dma_buf.len() / 2) };
+
+                // we'll place it here so we can return it to the higher level
+                // later in a `retrieve_buffers` call
+                self.stopped_buffer.replace(buf);
+            });
 
             ReturnCode::SUCCESS
         }
@@ -682,23 +698,38 @@ impl hil::adc::AdcHighSpeed for Adc {
                 return (res, Some(buffer1), Some(buffer2));
             }
 
-            // store the buffers 
-            self.dma_buffer.replace(buffer1);
-            self.dma_length.set(length1);
-            self.next_dma_buffer.replace(buffer2);
-            self.next_dma_length.set(length2);
-
             // setup sc3 for continuous sample here
             regs.sc3.modify(StatusControl3::ADCO::Continuous);
 
-            // enable DMA 
+            // store the second buffer for later use 
+            self.next_dma_buffer.replace(buffer2);
+            self.next_dma_length.set(length2);
+
+            let dma_len = cmp::min(buffer1.len(), length1);
+
+            // change buffer into a [u8]
+            // this is unsafe but acceptable for the following reasons
+            //  * the buffer is aligned based on 16-bit boundary, so the 8-bit
+            //    alignment is fine
+            //  * the DMA is doing checking based on our expected data width to
+            //    make sure we don't go past dma_buf.len()/width
+            //  * we will transmute the array back to a [u16] after the DMA
+            //    transfer is complete
+            let dma_buf_ptr = unsafe { mem::transmute::<*mut u16, *mut u8>(buffer1.as_mut_ptr()) };
+            let dma_buf = unsafe { slice::from_raw_parts_mut(dma_buf_ptr, buffer1.len() * 2) };
+
             regs.sc2.modify(StatusControl2::DMAEN::SET);
-            // TODO enable edma
+            self.rx_dma.map(move |dma| {
+                dma.enable();
+                self.rx_length.set(dma_len);
+                let config = dma::TransferConfig::new(
+                    0x4003B010, (&buffer1[0] as *const _) as u32, 2, dma_len as u16);
+                dma.do_transfer(config, dma_buf);
+            });
 
             // enable end of conversion interrupt and select input channel
             // since software trigger selected, conversion starts following write to sc1a
             regs.sc1a.write(Control::ADCH.val(channel.chan_num));
-        debug_gpio!(1,toggle);
 
             (ReturnCode::SUCCESS, None, None)
         }
@@ -748,8 +779,8 @@ impl hil::adc::AdcHighSpeed for Adc {
             // we're not running, so give back whatever we've got
             (
                 ReturnCode::SUCCESS,
-                self.dma_buffer.take(),
                 self.next_dma_buffer.take(),
+                self.stopped_buffer.take(),
             )
         }
     }
@@ -757,61 +788,76 @@ impl hil::adc::AdcHighSpeed for Adc {
 
 /// Implements a client of a DMA.
 impl dma::DMAClient for Adc {
-
-    fn get_transfer_config(&self) -> dma::TransferConfig {
-        let mut config = dma::TransferConfig::new(0x4003B010, 0, 2, self.dma_length.get() as u16);
-        self.dma_buffer.map( |dma_buffer| {
-            config = dma::TransferConfig::new(
-                0x4003B010, (&dma_buffer[0] as *const _) as usize as u32, 2, self.dma_length.get() as u16)
-        });
-        config
-    }
-
     /// Handler for DMA transfer completion.
     ///
     /// - `pid`: the DMA peripheral that is complete
-    fn transfer_done(&self) -> u32 {
-        //debug_gpio!(1,toggle);
-        0
-
-        /*
+    fn transfer_done(&self) {
         let regs: &AdcRegisters = &*self.registers;
         let status = regs.sc1a.is_set(Control::COCO);
+        if status {
+            // get buffer filled with samples from DMA
+            let dma_buffer = self.rx_dma.map_or(None, |rx_dma| {
+                let dma_buf = rx_dma.abort_transfer();
+                rx_dma.disable();
+                dma_buf
+            });
 
-        //TODO disable eDMA
+            // get length of received buffer
+            let length = self.rx_length.get();
 
-        if self.active.get() {
-            if status {
-                let val = regs.ra.read(DataResult::D) as u16;
+            // start a new transfer with the next buffer
+            // we need to do this quickly in order to keep from missing samples.
+            self.next_dma_buffer.take().map(|buf| {
+                // first determine the buffer's length in samples
+                let dma_len = cmp::min(buf.len(), self.next_dma_length.get());
 
-                let dma_buffer_idx = self.dma_buffer_idx.get();
-                if dma_buffer_idx < self.dma_length.get() {
-                    self.dma_buffer.map( |dma_buffer| {
-                        dma_buffer[dma_buffer_idx] = val; 
-                        self.dma_buffer_idx.set(dma_buffer_idx + 1);
+                // only continue with a nonzero length. If we were given a
+                // zero-length buffer or length field, assume that the user knew
+                // what was going on, and just don't use the buffer
+                if dma_len > 0 {
+                    // change buffer into a [u8]
+                    // this is unsafe but acceptable for the following reasons
+                    //  * the buffer is aligned based on 16-bit boundary, so the
+                    //    8-bit alignment is fine
+                    //  * the DMA is doing checking based on our expected data
+                    //    width to make sure we don't go past
+                    //    dma_buf.len()/width
+                    //  * we will transmute the array back to a [u16] after the
+                    //    DMA transfer is complete
+                    let dma_buf_ptr =
+                        unsafe { mem::transmute::<*mut u16, *mut u8>(buf.as_mut_ptr()) };
+                    let dma_buf = unsafe { slice::from_raw_parts_mut(dma_buf_ptr, buf.len() * 2) };
+
+                    // set up the DMA
+                    self.rx_dma.map(move |dma| {
+                        dma.enable();
+                        self.rx_length.set(dma_len);
+                        let config = dma::TransferConfig::new(
+                            0x4003B010, (&buf[0] as *const _) as u32, 2, dma_len as u16);
+                        dma.do_transfer(config, dma_buf);
                     });
                 } else {
-                    // start using next buffer
-                    let next_dma_buffer = self.next_dma_buffer.take().unwrap();
-                    let next_dma_length = self.next_dma_length.get();
-                    if next_dma_length > 0 {
-                        next_dma_buffer[0] = val;
-                    }
-                    let dma_buffer = self.dma_buffer.replace(next_dma_buffer);
-                    self.dma_buffer_idx.set(1);
-                    self.dma_length.set(next_dma_length);
-
-                    // alert client
-                    self.client.map(|client| {
-                        dma_buffer.map(|dma_buf| {
-                            // pass the buffer up to the next layer. It will then either
-                            // send down another buffer to continue sampling, or stop
-                            // sampling
-                            client.samples_ready(dma_buf, dma_buffer_idx);
-                        });
-                    });
+                    // if length was zero, just keep the buffer in the takecell
+                    // so we can return it when `stop_sampling` is called
+                    self.next_dma_buffer.replace(buf);
                 }
-            }
-        } */
+            });
+
+            // alert client
+            self.client.map(|client| {
+                dma_buffer.map(|dma_buf| {
+                    // change buffer back into a [u16]
+                    // the buffer was originally a [u16] so this should be okay
+                    let buf_ptr =
+                        unsafe { mem::transmute::<*mut u8, *mut u16>(dma_buf.as_mut_ptr()) };
+                    let buf = unsafe { slice::from_raw_parts_mut(buf_ptr, dma_buf.len() / 2) };
+
+                    // pass the buffer up to the next layer. It will then either
+                    // send down another buffer to continue sampling, or stop
+                    // sampling
+                    client.samples_ready(buf, length);
+                });
+            });
+        } 
     }
 }

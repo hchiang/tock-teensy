@@ -1,7 +1,7 @@
 //! Implementation of the eDMA peripheral.
 
 use core::cell::Cell;
-use kernel::common::cells::OptionalCell;
+use kernel::common::cells::{OptionalCell, TakeCell};
 use kernel::common::regs::{ReadOnly, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 
@@ -10,15 +10,25 @@ use kernel::common::StaticRef;
 #[allow(dead_code)]
 struct EDMABaseRegisters {
     cr: ReadWrite<u32, ControlRegister::Register>,
-    es: ReadOnly<u32>,
+    es: ReadOnly<u32, ErrorStatus::Register>,
     _reserved0: ReadOnly<u32>,
     erq: ReadWrite<u32>,
     _reserved1: ReadOnly<u32>,
     eei: ReadWrite<u32>,
-    ceei: WriteOnly<u8>,
-    seei: WriteOnly<u8>,
-    cerq: WriteOnly<u8, EnableRequest::Register>,
-    serq: WriteOnly<u8, EnableRequest::Register>,
+    ceei: WriteOnly<u8, ChannelSet::Register>,
+    seei: WriteOnly<u8, ChannelSet::Register>,
+    cerq: WriteOnly<u8, ChannelSet::Register>,
+    serq: WriteOnly<u8, ChannelSet::Register>,
+    cdne: WriteOnly<u8, ChannelSet::Register>,
+    ssrt: WriteOnly<u8, ChannelSet::Register>,
+    cerr: WriteOnly<u8, ChannelSet::Register>,
+    cint: WriteOnly<u8, ChannelSet::Register>,
+    _reserved2: ReadOnly<u32>,
+    int: ReadWrite<u32, ChannelStatus::Register>,
+    _reserved3: ReadOnly<u32>,
+    err: ReadWrite<u32, ChannelStatus::Register>,
+    _reserved4: ReadOnly<u32>,
+    hrs: ReadOnly<u32, ChannelStatus::Register>,
 }
 
 #[repr(C)]
@@ -45,10 +55,10 @@ struct DMAMUXRegisters {
 }
 
 register_bitfields![u8,
-    EnableRequest[
-        /// All Enable requests
-        AER OFFSET(6) NUMBITS(1) [],
-        ERQ OFFSET(0) NUMBITS(5) []
+    ChannelSet[
+        /// Enable all 
+        AEN OFFSET(6) NUMBITS(1) [],
+        EN OFFSET(0) NUMBITS(5) []
     ],
     ChannelConfiguration [
         /// DMA Channel Enable
@@ -78,7 +88,13 @@ register_bitfields![u16,
         /// Destination address modulo
         DMOD OFFSET(3) NUMBITS(5) [],
         /// Destination data transfer size
-        DSIZE OFFSET(0) NUMBITS(3) []
+        DSIZE OFFSET(0) NUMBITS(3) [
+            BITS8 = 0b000,
+            BITS16 = 0b001,
+            BITS32 = 0b010,
+            BURST16 = 0b100,
+            BURST32 = 0b101
+        ]
     ],
     DestinationAddressOffset[
         DOFF OFFSET(0) NUMBITS(16) []
@@ -90,6 +106,8 @@ register_bitfields![u16,
         CITER OFFSET(0) NUMBITS(15) []
     ],
     ControlAndStatus[
+        /// Disable request
+        DREQ OFFSET(3) NUMBITS(1) [],
         /// Enable an interrupt when major iteration count completes
         INTMAJOR OFFSET(1) NUMBITS(1) []
     ],
@@ -105,6 +123,68 @@ register_bitfields![u32,
     ControlRegister[
         /// Enable Minor Loop Mapping
         EMLM OFFSET(7) NUMBITS(1) []
+    ],
+    ErrorStatus[
+        /// Logical OR of all ERR status bits
+        VLD OFFSET(31) NUMBITS(1) [],
+        /// Transfer Canceled
+        ECX OFFSET(16) NUMBITS(1) [],
+        /// Group Priority Error
+        GPE OFFSET(15) NUMBITS(1) [],
+        /// Channel Priority Error
+        CPE OFFSET(14) NUMBITS(1) [],
+        /// Error Channel Number
+        ERRCHN OFFSET(8) NUMBITS(5) [],
+        /// Source Address Error 
+        SAE OFFSET(7) NUMBITS(1) [],
+        /// Source Offset Error 
+        SOE OFFSET(6) NUMBITS(1) [],
+        /// Destination Address Error 
+        DAE OFFSET(5) NUMBITS(1) [],
+        /// Destination Offset Error 
+        DOE OFFSET(4) NUMBITS(1) [],
+        /// NBYTES/CITER Configuration Error 
+        NCE OFFSET(3) NUMBITS(1) [],
+        /// Scatter/Gather Configuration Error
+        SGE OFFSET(2) NUMBITS(1) [],
+        /// Source Bus Error
+        SBE OFFSET(1) NUMBITS(1) [],
+        /// Destination Bus Error
+        DBE OFFSET(0) NUMBITS(1) []
+    ],
+    ChannelStatus[
+        C31 31,
+        C30 30,
+        C29 29,
+        C28 28,
+        C27 27,
+        C26 26,
+        C25 25,
+        C24 24,
+        C23 23,
+        C22 22,
+        C21 21,
+        C20 20,
+        C19 19,
+        C18 18,
+        C17 17,
+        C16 16,
+        C15 15,
+        C14 14,
+        C13 13,
+        C12 12,
+        C11 11,
+        C10 10,
+        C9 9,
+        C8 8,
+        C7 7,
+        C6 6,
+        C5 5,
+        C4 4,
+        C3 3,
+        C2 2,
+        C1 1,
+        C0 0
     ],
     SourceAddress[
         SADDR OFFSET(0) NUMBITS(32) []
@@ -215,7 +295,7 @@ pub struct TransferConfig {
 
 //TODO add accessor functions
 impl TransferConfig {
-    pub const fn new(saddr: u32, daddr: u32, nbytes: u16, nruns: u16) -> TransferConfig {
+    pub const fn new(saddr: u32, daddr:u32, nbytes: u16, nruns: u16) -> TransferConfig {
         TransferConfig {
             saddr: saddr,
             soff: 0,
@@ -233,6 +313,7 @@ impl TransferConfig {
     
 }
 
+pub static mut CHANNELS_ENABLED: u8 = 0;
 /// 32 DMA channels
 pub static mut DMA_CHANNELS: [DMAChannel; 32] = [
     DMAChannel::new(0),
@@ -273,16 +354,15 @@ pub struct DMAChannel {
     registers: StaticRef<EDMABaseRegisters>,
     tcd_registers: StaticRef<EDMATcdRegisters>,
     dmamux_registers: StaticRef<DMAMUXRegisters>,
-    transfer_config: OptionalCell<TransferConfig>,
     client: OptionalCell<&'static DMAClient>,
     periph: Cell<Option<DMAPeripheral>>,
     channel: Cell<u8>,
     enabled: Cell<bool>,
+    buffer: TakeCell<'static, [u8]>,
 }
 
 pub trait DMAClient {
-    fn get_transfer_config(&self) -> TransferConfig;
-    fn transfer_done(&self) -> u32;
+    fn transfer_done(&self);
 }
 
 impl DMAChannel {
@@ -303,11 +383,11 @@ impl DMAChannel {
                     (DMAMUX_BASE_ADDR + channel * DMAMUX_CHANNEL_SIZE) as *const DMAMUXRegisters,
                 )
             },
-            transfer_config: OptionalCell::empty(),
             client: OptionalCell::empty(),
             periph: Cell::new(None),
             channel: Cell::new(channel as u8),
             enabled: Cell::new(false),
+            buffer: TakeCell::empty(),
         }
     }
 
@@ -318,69 +398,53 @@ impl DMAChannel {
     }
 
     pub fn enable(&self) {
-        if !self.enabled.get() {
-            //TODO move clocks code out
-            use sim::{clocks, Clock};
-
-            //Enable DMAMUX
-            clocks::DMAMUX.enable();
-            let dmamux_registers: &DMAMUXRegisters = &*self.dmamux_registers;
-            dmamux_registers
-                .chcfg
-                .modify(ChannelConfiguration::ENBL::SET + 
-                    ChannelConfiguration::SOURCE.val(self.periph.get().unwrap() as u8)); 
-
-            //Configure eDMA
-            clocks::DMA.enable();
-            let registers: &EDMABaseRegisters = &*self.registers;
-            registers.cr.modify(ControlRegister::EMLM::SET);
-
-            self.client.map(|client| {
-                let transfer_config = client.get_transfer_config();
-
-                let tcd_registers: &EDMATcdRegisters = &*self.tcd_registers;
-
-                tcd_registers.saddr.modify(
-                    SourceAddress::SADDR.val(transfer_config.saddr));
-                tcd_registers.soff.modify(
-                    SourceAddressOffset::SOFF.val(transfer_config.soff));
-                tcd_registers.attr.modify(
-                    TransferAttributes::SSIZE.val(transfer_config.ssize) +
-                    TransferAttributes::DSIZE.val(transfer_config.dsize));
-                tcd_registers.mlo.modify(
-                    MinorLoopOffset::NBYTES.val(transfer_config.nbytes));
-                tcd_registers.slast.modify(
-                    LastSourceAddressAdjustment::SLAST.val(transfer_config.slast));
-                tcd_registers.daddr.modify(
-                    DestinationAddress::DADDR.val(transfer_config.daddr));
-                tcd_registers.doff.modify(
-                    DestinationAddressOffset::DOFF.val(transfer_config.doff));
-                tcd_registers.citer.modify(
-                    CurrentMinorLoopLink::CITER.val(transfer_config.citer));
-                tcd_registers.dlastsga.modify(
-                    LastDestinationAddressAdjustment::DLASTSGA.val(transfer_config.dlastsga));
-                tcd_registers.csr.modify(ControlAndStatus::INTMAJOR::SET);
-                tcd_registers.biter.modify(
-                    BeginningMinorLoopLink::BITER.val(transfer_config.biter));
-            });
-
-            //Start DMA 
-            registers.serq.write(EnableRequest::ERQ.val(self.channel.get()));
-            self.enabled.set(true);
+        if self.enabled.get() {
+            return;
         }
+        
+        let registers: &EDMABaseRegisters = &*self.registers;
+
+        unsafe {
+        if CHANNELS_ENABLED == 0 {
+            use sim::{clocks, Clock};
+            clocks::DMAMUX.enable();
+            clocks::DMA.enable();
+            registers.cr.modify(ControlRegister::EMLM::SET);
+        }
+        CHANNELS_ENABLED = CHANNELS_ENABLED + 1;
+        }
+
+        let dmamux_registers: &DMAMUXRegisters = &*self.dmamux_registers;
+        dmamux_registers
+            .chcfg
+            .modify(ChannelConfiguration::ENBL::SET + 
+                ChannelConfiguration::SOURCE.val(self.periph.get().unwrap() as u8)); 
+
+        self.enabled.set(true);
     }
 
     pub fn disable(&self) {
-        if self.enabled.get() {
-            self.enabled.set(false);
-            //Stop DMA
-            let registers: &EDMABaseRegisters = &*self.registers;
-            registers.cerq.write(EnableRequest::ERQ.val(self.channel.get()));
+        if !self.enabled.get() {
+            return;
+        }
+        self.enabled.set(false);
 
-            //Disable DMAMUX
-            let dmamux_registers: &DMAMUXRegisters = &*self.dmamux_registers;
-            dmamux_registers.chcfg.write(ChannelConfiguration::ENBL::CLEAR);
+        //Stop DMA
+        let registers: &EDMABaseRegisters = &*self.registers;
+        registers.cerq.write(ChannelSet::EN.val(self.channel.get()));
 
+        //Disable DMAMUX
+        let dmamux_registers: &DMAMUXRegisters = &*self.dmamux_registers;
+        dmamux_registers.chcfg.write(ChannelConfiguration::ENBL::CLEAR);
+
+        unsafe {
+        CHANNELS_ENABLED = CHANNELS_ENABLED - 1;
+        if CHANNELS_ENABLED == 0 {
+            //TODO rewrite sim to implement disable
+            //use sim::{clocks, Clock};
+            //clocks::DMA.disable();
+            //clocks::DMAMUX.disable();
+        }
         }
     }
 
@@ -388,12 +452,66 @@ impl DMAChannel {
         self.enabled.get()
     }
 
+    pub fn prepare_transfer(&self, transfer_config: TransferConfig, buf: &'static mut [u8]) { 
+        let tcd_registers: &EDMATcdRegisters = &*self.tcd_registers;
+        tcd_registers.saddr.modify(
+            SourceAddress::SADDR.val(transfer_config.saddr));
+        tcd_registers.soff.modify(
+            SourceAddressOffset::SOFF.val(transfer_config.soff));
+        tcd_registers.attr.modify(
+            TransferAttributes::SSIZE.val(transfer_config.ssize) +
+            TransferAttributes::DSIZE.val(transfer_config.dsize));
+        tcd_registers.mlo.modify(
+            MinorLoopOffset::NBYTES.val(transfer_config.nbytes));
+        tcd_registers.slast.modify(
+            LastSourceAddressAdjustment::SLAST.val(transfer_config.slast));
+        tcd_registers.daddr.modify(
+            DestinationAddress::DADDR.val(transfer_config.daddr));
+        tcd_registers.doff.modify(
+            DestinationAddressOffset::DOFF.val(transfer_config.doff));
+        tcd_registers.citer.modify(
+            CurrentMinorLoopLink::CITER.val(transfer_config.citer));
+        tcd_registers.dlastsga.modify(
+            LastDestinationAddressAdjustment::DLASTSGA.val(transfer_config.dlastsga));
+        tcd_registers.csr.modify(ControlAndStatus::INTMAJOR::SET);
+        tcd_registers.biter.modify(
+            BeginningMinorLoopLink::BITER.val(transfer_config.biter));
+
+        self.buffer.replace(buf);
+        
+    }
+
+    pub fn start_transfer(&self) {
+        let registers: &EDMABaseRegisters = &*self.registers;
+
+        //Enable error interrupt
+        registers.seei.write(ChannelSet::AEN::SET);
+
+        //Start DMA 
+        registers.serq.write(ChannelSet::EN.val(self.channel.get()));
+    }
+
+    pub fn do_transfer(&self, transfer_config: TransferConfig, buf: &'static mut [u8]) { 
+        self.prepare_transfer(transfer_config, buf);
+        self.start_transfer();
+    }
+
+    pub fn abort_transfer(&self) -> Option<&'static mut [u8]> {
+        let tcd_registers: &EDMATcdRegisters = &*self.tcd_registers;
+        tcd_registers.csr.modify(ControlAndStatus::DREQ::SET);
+
+        self.buffer.take()
+    }
+
     pub fn handle_interrupt(&mut self) {
+        //TODO have client set dlastga
         self.client.map(|client| {
-            let dlastsga = client.transfer_done();
-            let tcd_registers: &EDMATcdRegisters = &*self.tcd_registers;
-            tcd_registers.dlastsga.modify(
-                LastDestinationAddressAdjustment::DLASTSGA.val(dlastsga));
+            client.transfer_done();
+            //let tcd_registers: &EDMATcdRegisters = &*self.tcd_registers;
+            //tcd_registers.dlastsga.modify(
+            //    LastDestinationAddressAdjustment::DLASTSGA.val(dlastsga));
         });
+
+        registers.cint.write(ChannelSet::EN.val(self.channel.get()));
     }
 }
