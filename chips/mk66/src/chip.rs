@@ -43,7 +43,6 @@ impl Chip for MK66 {
                 match interrupt {
                     DMA0 => dma::DMA_CHANNELS[0].handle_interrupt(),
                     DMA1 => dma::DMA_CHANNELS[1].handle_interrupt(),
-                    //DMAERR => dma::DMA_CHANNELS[0].handle_interrupt(),
 
                     ADC0 => adc::ADC0.handle_interrupt(),
                     ADC1 => adc::ADC1.handle_interrupt(),

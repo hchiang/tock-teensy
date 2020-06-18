@@ -1,7 +1,7 @@
 //! Implementation of the eDMA peripheral.
 
 use core::cell::Cell;
-use kernel::common::cells::{OptionalCell, TakeCell};
+use kernel::common::cells::OptionalCell;
 use kernel::common::regs::{ReadOnly, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
 
@@ -358,7 +358,6 @@ pub struct DMAChannel {
     periph: Cell<Option<DMAPeripheral>>,
     channel: Cell<u8>,
     enabled: Cell<bool>,
-    buffer: TakeCell<'static, [u8]>,
 }
 
 pub trait DMAClient {
@@ -387,7 +386,6 @@ impl DMAChannel {
             periph: Cell::new(None),
             channel: Cell::new(channel as u8),
             enabled: Cell::new(false),
-            buffer: TakeCell::empty(),
         }
     }
 
@@ -452,66 +450,55 @@ impl DMAChannel {
         self.enabled.get()
     }
 
-    pub fn prepare_transfer(&self, transfer_config: TransferConfig, buf: &'static mut [u8]) { 
+    pub fn prepare_transfer(&self, transfer_config: TransferConfig) { 
         let tcd_registers: &EDMATcdRegisters = &*self.tcd_registers;
-        tcd_registers.saddr.modify(
+        tcd_registers.saddr.write(
             SourceAddress::SADDR.val(transfer_config.saddr));
-        tcd_registers.soff.modify(
+        tcd_registers.soff.write(
             SourceAddressOffset::SOFF.val(transfer_config.soff));
-        tcd_registers.attr.modify(
+        tcd_registers.attr.write(
             TransferAttributes::SSIZE.val(transfer_config.ssize) +
             TransferAttributes::DSIZE.val(transfer_config.dsize));
-        tcd_registers.mlo.modify(
+        tcd_registers.mlo.write(
             MinorLoopOffset::NBYTES.val(transfer_config.nbytes));
-        tcd_registers.slast.modify(
+        tcd_registers.slast.write(
             LastSourceAddressAdjustment::SLAST.val(transfer_config.slast));
-        tcd_registers.daddr.modify(
+        tcd_registers.daddr.write(
             DestinationAddress::DADDR.val(transfer_config.daddr));
-        tcd_registers.doff.modify(
+        tcd_registers.doff.write(
             DestinationAddressOffset::DOFF.val(transfer_config.doff));
-        tcd_registers.citer.modify(
+        tcd_registers.citer.write(
             CurrentMinorLoopLink::CITER.val(transfer_config.citer));
-        tcd_registers.dlastsga.modify(
+        tcd_registers.dlastsga.write(
             LastDestinationAddressAdjustment::DLASTSGA.val(transfer_config.dlastsga));
-        tcd_registers.csr.modify(ControlAndStatus::INTMAJOR::SET);
-        tcd_registers.biter.modify(
+        tcd_registers.csr.write(ControlAndStatus::DREQ::SET + ControlAndStatus::INTMAJOR::SET);
+        tcd_registers.biter.write(
             BeginningMinorLoopLink::BITER.val(transfer_config.biter));
-
-        self.buffer.replace(buf);
-        
     }
 
     pub fn start_transfer(&self) {
         let registers: &EDMABaseRegisters = &*self.registers;
 
-        //Enable error interrupt
-        registers.seei.write(ChannelSet::AEN::SET);
-
         //Start DMA 
         registers.serq.write(ChannelSet::EN.val(self.channel.get()));
     }
 
-    pub fn do_transfer(&self, transfer_config: TransferConfig, buf: &'static mut [u8]) { 
-        self.prepare_transfer(transfer_config, buf);
+    pub fn do_transfer(&self, transfer_config: TransferConfig) { 
+        self.prepare_transfer(transfer_config);
         self.start_transfer();
     }
 
-    pub fn abort_transfer(&self) -> Option<&'static mut [u8]> {
+    pub fn abort_transfer(&self) {
         let tcd_registers: &EDMATcdRegisters = &*self.tcd_registers;
         tcd_registers.csr.modify(ControlAndStatus::DREQ::SET);
-
-        self.buffer.take()
     }
 
     pub fn handle_interrupt(&mut self) {
-        //TODO have client set dlastga
+        let registers: &EDMABaseRegisters = &*self.registers;
+        registers.cint.write(ChannelSet::EN.val(self.channel.get()));
+
         self.client.map(|client| {
             client.transfer_done();
-            //let tcd_registers: &EDMATcdRegisters = &*self.tcd_registers;
-            //tcd_registers.dlastsga.modify(
-            //    LastDestinationAddressAdjustment::DLASTSGA.val(dlastsga));
         });
-
-        registers.cint.write(ChannelSet::EN.val(self.channel.get()));
     }
 }
