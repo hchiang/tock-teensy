@@ -9,6 +9,7 @@ pub trait ComponentWithDependency<D>: Component {
 }
 
 mod adc;
+mod nonvolatile_storage;
 mod gpio;
 mod led;
 mod spi;
@@ -18,6 +19,7 @@ mod xconsole;
 mod rnga;
 
 pub use self::adc::AdcComponent;
+pub use self::nonvolatile_storage::NonvolatileStorageComponent;
 pub use self::gpio::GpioComponent;
 pub use self::led::LedComponent;
 pub use self::spi::VirtualSpiComponent;

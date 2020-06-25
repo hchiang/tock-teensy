@@ -33,6 +33,7 @@ use components::*;
 struct Teensy {
     xconsole: <XConsoleComponent as Component>::Output,
     adc: <AdcComponent as Component>::Output,
+    nonvolatile_storage: <NonvolatileStorageComponent as Component>::Output,
     gpio: <GpioComponent as Component>::Output,
     led: <LedComponent as Component>::Output,
     alarm: <AlarmComponent as Component>::Output,
@@ -48,6 +49,7 @@ impl kernel::Platform for Teensy {
         match driver_num {
             xconsole::DRIVER_NUM => f(Some(self.xconsole)),
             capsules::adc::DRIVER_NUM => f(Some(self.adc)),
+            capsules::nonvolatile_storage_driver::DRIVER_NUM => f(Some(self.nonvolatile_storage)),
             capsules::gpio::DRIVER_NUM => f(Some(self.gpio)),
 
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
@@ -93,6 +95,7 @@ pub unsafe fn reset_handler() {
     debug_gpio!(1, clear);
 
     let adc = AdcComponent::new().finalize().unwrap();
+    let nonvolatile_storage = NonvolatileStorageComponent::new().finalize().unwrap();
     let gpio = GpioComponent::new()
                              .dependency(gpio_pins)
                              .finalize().unwrap();
@@ -107,6 +110,7 @@ pub unsafe fn reset_handler() {
     let teensy = Teensy {
         xconsole: xconsole,
         adc: adc,
+        nonvolatile_storage: nonvolatile_storage,
         gpio: gpio,
         led: led,
         alarm: alarm,

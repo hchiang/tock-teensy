@@ -6,7 +6,7 @@
 //! frequency.
 //!
 //! - Author: Holly Chiang <hchiang1@stanford.edu>
-//! - Updated: Feb 24, 2020
+//! - Date: June 18, 2020
 
 use clock;
 use core::cell::Cell;
@@ -27,7 +27,7 @@ pub struct AdcChannel {
 }
 
 /// K66 ADC channels.
-#[allow(non_camel_case_types)]
+#[allow(non_camel_case_types, dead_code)]
 #[derive(Copy, Clone, Debug)]
 #[repr(u8)]
 enum Channel0 {
@@ -58,7 +58,7 @@ enum Channel0 {
     Disabled = 0x31,
 }
 
-#[allow(non_camel_case_types)]
+#[allow(non_camel_case_types, dead_code)]
 enum Channel1 {
     ADC1_DP0_DM0 = 0x00, //DP0 is A10, DM0 is A11
     ADC1_SE4b = 0x04, //A16
@@ -150,7 +150,6 @@ pub struct Adc {
 
     // DMA peripheral, buffers, and length
     rx_dma: OptionalCell<&'static dma::DMAChannel>,
-    rx_dma_peripheral: dma::DMAPeripheral,
     rx_length: Cell<usize>,
     dma_buffer: TakeCell<'static, [u16]>,
     dma_length: Cell<usize>,
@@ -363,8 +362,8 @@ pub const ADC_ADDRS: [StaticRef<AdcRegisters>; 2] = [
 
 /// Statically allocated ADC driver. Used in board configurations to connect to
 /// various capsules.
-pub static mut ADC0: Adc = Adc::new(0, dma::DMAPeripheral::ADC0);
-pub static mut ADC1: Adc = Adc::new(1, dma::DMAPeripheral::ADC1);
+pub static mut ADC0: Adc = Adc::new(0);
+pub static mut ADC1: Adc = Adc::new(1);
 
 /// Functions for initializing the ADC.
 impl Adc {
@@ -374,7 +373,6 @@ impl Adc {
     /// - `rx_dma_peripheral`: type used for DMA transactions
     const fn new(
         index: usize,
-        rx_dma_peripheral: dma::DMAPeripheral,
     ) -> Adc {
         Adc {
             // pointer to memory mapped I/O registers
@@ -388,7 +386,6 @@ impl Adc {
 
             // DMA status and stuff
             rx_dma: OptionalCell::empty(),
-            rx_dma_peripheral: rx_dma_peripheral,
             rx_length: Cell::new(0),
             dma_buffer: TakeCell::empty(),
             dma_length: Cell::new(0),

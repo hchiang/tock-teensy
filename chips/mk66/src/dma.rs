@@ -1,4 +1,7 @@
-//! Implementation of the eDMA peripheral.
+//! Implementation of the DMA peripheral.
+//!
+//! - Author:  Holly Chiang <hchiang1@stanford.edu>
+//! - Date: June 18, 2020 
 
 use core::cell::Cell;
 use kernel::common::cells::OptionalCell;
