@@ -7,10 +7,14 @@ int main(void) {
   uint32_t freq = 10000;
   uint32_t length = 100;
   uint16_t buf[length];
-    
+  for (uint32_t i = 0; i < length; i++) {
+    buf[i] = 0;
+  }
+
   while(1) {
     int err = adc_sample_buffer_sync(channel, freq, buf, length);
 
+    for (volatile int i=0; i<100000; i++) {}
     if (err < 0) {
         printf("Error sampling ADC: %d\n", err);
     }
@@ -29,6 +33,6 @@ int main(void) {
     }
 
     // This delay uses an underlying timer in the kernel.
-    delay_ms(250);
+    delay_ms(300);
   }
 }

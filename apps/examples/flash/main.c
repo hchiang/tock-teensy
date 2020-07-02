@@ -19,8 +19,7 @@ static void read_done(int length,
 }
 
 int main(void) {
-
-  int len = 10;
+  int len = 500;
   uint8_t readbuf[len];
   uint8_t writebuf[len];
   int ret = nonvolatile_storage_internal_read_buffer(readbuf, len);
@@ -35,6 +34,18 @@ int main(void) {
   printf("Begin\n");
   int num_runs = 0;
   while(num_runs < 5) {
+    for(int i=0; i<len; i++){
+      writebuf[i] = 4+num_runs;
+    }
+
+    wdone = false;
+    ret  = nonvolatile_storage_internal_write(0, len);
+    if (ret != 0) {
+      printf("\tERROR calling write\n");
+      return ret;
+    }
+    yield_for(&wdone);
+
     rdone = false;
     ret  = nonvolatile_storage_internal_read(0, len);
     if (ret != 0) {
@@ -46,21 +57,11 @@ int main(void) {
     printf("Readbuf:");
     for(int i=0; i< len; i++){
         printf("%d ", readbuf[len]);
-        writebuf[len] = readbuf[len] + 1;
     }
     printf("\n");
 
-    wdone = false;
-    ret  = nonvolatile_storage_internal_write(0, len);
-    if (ret != 0) {
-      printf("\tERROR calling write\n");
-      return ret;
-    }
-    yield_for(&wdone);
-    printf("Done\n");
-
     num_runs += 1;
-
     delay_ms(300);
   }
+  printf("Done\n");
 }

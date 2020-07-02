@@ -14,12 +14,43 @@ use kernel::common::StaticRef;
 use kernel::hil;
 use kernel::ReturnCode;
 
+/// FMC registers. Section 31.5 of the datasheet
+#[repr(C)]
+struct FMCRegisters {
+    pfapr: ReadWrite<u32>,
+    pfb01cr: ReadWrite<u32, FlashBank01Control::Register>,
+    pfb23cr: ReadWrite<u32, FlashBank23Control::Register>,
+}
+
+register_bitfields![u32,
+    FlashBank01Control [
+        BORWSC OFFSET(28) NUMBITS(4) [],
+        CLCK_WAY OFFSET(24) NUMBITS(4) [],
+        CINV_WAY OFFSET(20) NUMBITS(4) [],
+        S_B_INV OFFSET(19) NUMBITS(1) [],
+        B0MW OFFSET(17) NUMBITS(2) [],
+        CRC OFFSET(5) NUMBITS(3) [],
+        B0DCE OFFSET(4) NUMBITS(1) [],
+        B0ICE OFFSET(3) NUMBITS(1) [],
+        B0DPE OFFSET(2) NUMBITS(1) [],
+        B0IPE OFFSET(1) NUMBITS(1) []
+    ],
+    FlashBank23Control [
+        B1RWSC OFFSET(28) NUMBITS(4) [],
+        B1MW OFFSET(17) NUMBITS(2) [],
+        B1DCE OFFSET(4) NUMBITS(1) [],
+        B1ICE OFFSET(3) NUMBITS(1) [],
+        B1DPE OFFSET(2) NUMBITS(1) [],
+        B1IPE OFFSET(1) NUMBITS(1) []
+    ]
+];
+
 /// Flash registers. Section 32.3.4 of the datasheet
 #[repr(C)]
 struct FlashRegisters {
     fstat: ReadWrite<u8, FlashStatus::Register>,
     fcnfg: ReadWrite<u8, FlashConfiguration::Register>,
-    fsec: ReadOnly<u8>,
+    fsec: ReadOnly<u8, FlashSecurity::Register>,
     fopt: ReadOnly<u8>,
     fccob3: ReadWrite<u8, FlashCommonCommandObject::Register>,
     fccob2: ReadWrite<u8, FlashCommonCommandObject::Register>,
@@ -78,6 +109,12 @@ register_bitfields![u8,
         PFLSH 2,
         RAMRDY 1,
         EEERDY 0
+    ],
+    FlashSecurity [
+        KEYEN OFFSET(6) NUMBITS(2) [],
+        MEEN OFFSET(4) NUMBITS(2) [],
+        FSLACC OFFSET(2) NUMBITS(2) [],
+        SEC OFFSET(0) NUMBITS(2) []
     ],
     FlashCommonCommandObject [
         CCOB OFFSET(0) NUMBITS(8) []
@@ -148,6 +185,9 @@ const FLEXRAM_ADDR: usize = 0x1400_0000;
 /// From 32.4.12.8 only the lower quarter of the RAM can be used as a 
 /// section program buffer
 const PROGRAM_BUFFER_SIZE: usize = 1024;
+/// From 32.4.12, address bit 23 is used to select between program flash
+/// memory (=0) and data flash memory (=1)
+const SELECT_DATA_FLASH: usize = 0x800000;
 
 /// This is a wrapper around a u8 array that is sized to a single page for the
 /// K66. Users of this module must pass an object of this type to use the
@@ -192,22 +232,28 @@ impl AsMut<[u8]> for K66Sector {
 
 // The FLASH memory module
 pub struct FTFE {
+    fmc_registers: StaticRef<FMCRegisters>,
     registers: StaticRef<FlashRegisters>,
     client: Cell<Option<&'static hil::flash::Client<FTFE>>>,
     current_state: Cell<FlashState>,
     buffer: TakeCell<'static, K66Sector>,
 }
 
+const FMC_REGISTER_ADDRESS: StaticRef<FMCRegisters> =
+    unsafe { StaticRef::new(0x4001f000 as *const FMCRegisters) };
 const FLASH_REGISTER_ADDRESS: StaticRef<FlashRegisters> =
     unsafe { StaticRef::new(0x40020000 as *const FlashRegisters) };
 // static instance for the board. Only one FTFE on chip.
-pub static mut FLASH_CONTROLLER: FTFE = FTFE::new(FLASH_REGISTER_ADDRESS);
+pub static mut FLASH_CONTROLLER: FTFE = FTFE::new(FMC_REGISTER_ADDRESS,
+                                                  FLASH_REGISTER_ADDRESS);
 
 impl FTFE {
     const fn new(
+        fmc_registers: StaticRef<FMCRegisters>,
         registers: StaticRef<FlashRegisters>,
     ) -> FTFE {
         FTFE {
+            fmc_registers: fmc_registers,
             registers: registers,
             client: Cell::new(None),
             current_state: Cell::new(FlashState::Unconfigured),
@@ -215,6 +261,10 @@ impl FTFE {
         }
     }
     pub fn handle_interrupt(&self) {
+        let regs: &FlashRegisters = &*self.registers;
+        // Disable interrupt.
+        regs.fcnfg.modify(FlashConfiguration::CCIE::CLEAR);
+
         // Check for errors and report to Client if there are any
         if self.is_error() {
             let attempted_operation = self.current_state.get();
@@ -265,6 +315,13 @@ impl FTFE {
                 if offset >= SECTOR_SIZE {
                     self.current_state.set(FlashState::Ready);
 
+                    //flush FlexNVM cache
+                    //let fmc_regs: &FMCRegisters = &*self.fmc_registers;
+                    //fmc_regs.pfb01cr.modify(FlashBank01Control::CINV_WAY.val(0xf) +
+                    //    FlashBank01Control::S_B_INV::SET);
+                    //fmc_regs.pfb23cr.modify(FlashBank23Control::B1DCE::CLEAR + 
+                    //                        FlashBank23Control::B1DPE::CLEAR); 
+
                     self.client.get().map(|client| {
                         self.buffer.take().map(|buffer| {
                             client.write_complete(buffer, hil::flash::Error::CommandComplete);
@@ -300,26 +357,28 @@ impl FTFE {
 
     /// Ftfe command control
     fn issue_command(&self, command: FlashCMD, argument: usize) {
-        // This currently works for EraseFlashSector and ProgramSection
+        // This currently works for EraseFlashSector, ProgramSection, and SetFlexRamFunction
         let regs: &FlashRegisters = &*self.registers;
-            
-        // Wait for commands to finish
-        while !regs.fstat.is_set(FlashStatus::CCIF) {}
 
         if self.is_error() {
+            debug_gpio!(0,toggle);
             if regs.fstat.is_set(FlashStatus::RDCOLERR) {
-                regs.fstat.modify(FlashStatus::RDCOLERR::SET);
+                regs.fstat.write(FlashStatus::RDCOLERR::SET);
             }
             if regs.fstat.is_set(FlashStatus::ACCERR) {
-                regs.fstat.modify(FlashStatus::ACCERR::SET);
+                regs.fstat.write(FlashStatus::ACCERR::SET);
             }
             if regs.fstat.is_set(FlashStatus::FPVIOL) {
-                regs.fstat.modify(FlashStatus::FPVIOL::SET);
+                regs.fstat.write(FlashStatus::FPVIOL::SET);
             }
+            regs.fstat.write(FlashStatus::CCIF::SET);
         }
 
+        // Wait for commands to finish
+        while !regs.fstat.is_set(FlashStatus::CCIF) {}
+        
         // Enable interrupt.
-        regs.fcnfg.modify(FlashConfiguration::CCIE::SET);
+        regs.fcnfg.modify(FlashConfiguration::CCIE::SET + FlashConfiguration::RDCOLLIE::SET);
 
         //// Setup the command registers
         regs.fccob0.write(FlashCommonCommandObject::CCOB.val(command as u8));
@@ -327,9 +386,10 @@ impl FTFE {
             regs.fccob1.write(FlashCommonCommandObject::CCOB.val((argument & 0xff) as u8));
         }
         if command == FlashCMD::EraseFlashSector || command == FlashCMD::ProgramSection {
-            regs.fccob1.write(FlashCommonCommandObject::CCOB.val(((argument >> 16) & 0xff) as u8));
-            regs.fccob2.write(FlashCommonCommandObject::CCOB.val(((argument >> 8) & 0xff) as u8));
-            regs.fccob3.write(FlashCommonCommandObject::CCOB.val((argument & 0xff) as u8));
+            let address = argument | SELECT_DATA_FLASH;
+            regs.fccob1.write(FlashCommonCommandObject::CCOB.val(((address >> 16) & 0xff) as u8));
+            regs.fccob2.write(FlashCommonCommandObject::CCOB.val(((address >> 8) & 0xff) as u8));
+            regs.fccob3.write(FlashCommonCommandObject::CCOB.val((address & 0xff) as u8));
         }
         if command == FlashCMD::ProgramSection {
             let num_double_phrases = PROGRAM_BUFFER_SIZE / 16; 
