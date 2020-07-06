@@ -7,6 +7,7 @@ use mpu;
 use dma;
 use adc;
 use flash;
+use sim;
 use deferred_call_tasks::Task;
 use nvic;
 
@@ -91,6 +92,20 @@ impl Chip for MK66 {
     }
 
     fn sleep(&self) {
+        if sim::deep_sleep_ready() {
+            unsafe {
+                cortexm4::scb::set_sleepdeep();
+            }
+        }
+        else {
+            unsafe {
+                cortexm4::scb::unset_sleepdeep();
+            }
+        }
+
+        unsafe {
+            cortexm4::support::wfi();
+        }
     }
 
     unsafe fn atomic<F, R>(&self, f: F) -> R

@@ -12,6 +12,7 @@ use kernel::hil::rng::{self, Continue};
 use sha2::{Sha256, Digest};
 use twofish::{Twofish, BlockCipher};
 use block_cipher_trait::generic_array::GenericArray;
+use sim;
 
 #[repr(C)]
 struct RngaRegisters {
@@ -70,9 +71,7 @@ impl<'a> Rnga<'a> {
 
     pub fn init(&mut self) {
         // set clock gate
-        use regs::sim::*;
-        let sim = unsafe { &*SIM };
-        sim.scgc6.modify(SystemClockGatingControl6::RNGA::SET);
+        sim::enable_clock(sim::Clock::Clock3(sim::ClockGate3::RNGA));
 
         // start rnga
         let regs = unsafe { &*self.regs };

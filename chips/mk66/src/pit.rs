@@ -4,6 +4,7 @@ use core::cell::Cell;
 use kernel::hil::time::{Client, Time, Alarm, Frequency};
 use nvic;
 use clock::peripheral_clock_hz;
+use sim;
 
 pub static mut PIT: Pit<'static> = Pit::new();
 
@@ -21,9 +22,8 @@ impl<'a> Pit<'a> {
     }
 
     pub fn init(&self) {
-        use sim::{clocks, Clock};
 
-        clocks::PIT.enable();
+        sim::enable_clock(sim::Clock::Clock6(sim::ClockGate6::PIT));
         self.regs().mcr.write(ModuleControl::MDIS::CLEAR +
                               ModuleControl::FRZ::SET);
 

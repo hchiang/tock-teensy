@@ -13,6 +13,7 @@ use kernel::common::regs::{ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::hil;
 use kernel::ReturnCode;
+use sim;
 
 /// FMC registers. Section 31.5 of the datasheet
 #[repr(C)]
@@ -361,7 +362,6 @@ impl FTFE {
         let regs: &FlashRegisters = &*self.registers;
 
         if self.is_error() {
-            debug_gpio!(0,toggle);
             if regs.fstat.is_set(FlashStatus::RDCOLERR) {
                 regs.fstat.write(FlashStatus::RDCOLERR::SET);
             }
@@ -424,8 +424,7 @@ impl FTFE {
 
     pub fn configure(&mut self) {
         // Enable clock in case it's off.
-        use sim::{clocks, Clock};
-        clocks::FTF.enable();
+        sim::enable_clock(sim::Clock::Clock6(sim::ClockGate6::FTF));
 
         self.current_state.set(FlashState::Ready);
     }

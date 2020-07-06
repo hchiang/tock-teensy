@@ -3,145 +3,206 @@
 use core::mem;
 use regs::sim::*;
 use kernel::common::regs::FieldValue;
+use kernel::ClockInterface;
 
-pub type Clock1 = FieldValue<u32, SystemClockGatingControl1::Register>;
-pub type Clock2 = FieldValue<u32, SystemClockGatingControl2::Register>;
-pub type Clock3 = FieldValue<u32, SystemClockGatingControl3::Register>;
-pub type Clock4 = FieldValue<u32, SystemClockGatingControl4::Register>;
-pub type Clock5 = FieldValue<u32, SystemClockGatingControl5::Register>;
-pub type Clock6 = FieldValue<u32, SystemClockGatingControl6::Register>;
-pub type Clock7 = FieldValue<u32, SystemClockGatingControl7::Register>;
-
-pub trait Clock {
-    fn enable(self);
+#[derive(Copy, Clone, Debug)]
+pub enum Clock {
+    Clock1(ClockGate1),
+    Clock2(ClockGate2),
+    Clock3(ClockGate3),
+    Clock4(ClockGate4),
+    Clock5(ClockGate5),
+    Clock6(ClockGate6),
+    Clock7(ClockGate7),
 }
 
-impl Clock for Clock1 {
-    fn enable(self) {
-        let regs: &mut Registers = unsafe { mem::transmute(SIM) };
-        regs.scgc1.modify(self);
+#[derive(Copy, Clone, Debug)]
+pub enum ClockGate1 {
+    I2C2 = 6,
+    I2C3,
+    UART4 = 10,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum ClockGate2 {
+    ENET = 0,
+    LPUART0 = 4,
+    TPM1 = 9,
+    TPM2,
+    DAC0 = 12,
+    DAC1,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum ClockGate3 {
+    RNGA,
+    USBHS,
+    USBHSPHY,
+    USBHSDCD,
+    FLEXCAN1,
+    SPI2 = 12,
+    SDHC = 17,
+    FTM2 = 24,
+    FTM3,
+    ADC1 = 27,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum ClockGate4 {
+    EWM = 1,
+    CMT,
+    I2C0 = 6,
+    I2C1,
+    UART0 = 10,
+    UART1,
+    UART2, 
+    UART3,
+    USBOTG = 18,
+    CMP,
+    VREF,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum ClockGate5 {
+    LPTMR,
+    TSI = 5,
+    PORTA = 9,
+    PORTB,
+    PORTC,
+    PORTD,
+    PORTE,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum ClockGate6 {
+    FTF,
+    DMAMUX,
+    FLEXCAN0 = 4,
+    RNGA = 9,   
+    SPI0 = 12,
+    SPI1,
+    I2S = 15,
+    CRC = 18,
+    USBDCD = 21,
+    PDB,
+    PIT,
+    FTM0,
+    FTM1,
+    FTM2,
+    ADC0, 
+    RTC = 29,
+    DAC0 = 31,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum ClockGate7 {
+    FLEXBUS,
+    DMA,
+    MPU,
+    SDRAMC,
+}
+
+impl ClockInterface for Clock {
+    fn is_enabled(&self) -> bool {
+        match self {
+            &Clock::Clock1(v) => SIM_REGS.scgc1.get() & (1 << (v as u32)) != 0,
+            &Clock::Clock2(v) => SIM_REGS.scgc2.get() & (1 << (v as u32)) != 0,
+            &Clock::Clock3(v) => SIM_REGS.scgc3.get() & (1 << (v as u32)) != 0,
+            &Clock::Clock4(v) => SIM_REGS.scgc4.get() & (1 << (v as u32)) != 0,
+            &Clock::Clock5(v) => SIM_REGS.scgc5.get() & (1 << (v as u32)) != 0,
+            &Clock::Clock6(v) => SIM_REGS.scgc6.get() & (1 << (v as u32)) != 0,
+            &Clock::Clock7(v) => SIM_REGS.scgc7.get() & (1 << (v as u32)) != 0,
+        }
+    }
+    fn enable(&self) {
+        match self {
+            &Clock::Clock1(v) => SIM_REGS.scgc1.set(SIM_REGS.scgc1.get() | 1 << (v as u32)),
+            &Clock::Clock2(v) => SIM_REGS.scgc2.set(SIM_REGS.scgc2.get() | 1 << (v as u32)),
+            &Clock::Clock3(v) => SIM_REGS.scgc3.set(SIM_REGS.scgc3.get() | 1 << (v as u32)),
+            &Clock::Clock4(v) => SIM_REGS.scgc4.set(SIM_REGS.scgc4.get() | 1 << (v as u32)),
+            &Clock::Clock5(v) => SIM_REGS.scgc5.set(SIM_REGS.scgc5.get() | 1 << (v as u32)),
+            &Clock::Clock6(v) => SIM_REGS.scgc6.set(SIM_REGS.scgc6.get() | 1 << (v as u32)),
+            &Clock::Clock7(v) => SIM_REGS.scgc7.set(SIM_REGS.scgc7.get() | 1 << (v as u32)),
+        }
+    }
+    fn disable(&self) {
+        match self {
+            &Clock::Clock1(v) => SIM_REGS.scgc1.set(SIM_REGS.scgc1.get() & !(1 << (v as u32))),
+            &Clock::Clock2(v) => SIM_REGS.scgc2.set(SIM_REGS.scgc2.get() & !(1 << (v as u32))),
+            &Clock::Clock3(v) => SIM_REGS.scgc3.set(SIM_REGS.scgc3.get() & !(1 << (v as u32))),
+            &Clock::Clock4(v) => SIM_REGS.scgc4.set(SIM_REGS.scgc4.get() & !(1 << (v as u32))),
+            &Clock::Clock5(v) => SIM_REGS.scgc5.set(SIM_REGS.scgc5.get() & !(1 << (v as u32))),
+            &Clock::Clock6(v) => SIM_REGS.scgc6.set(SIM_REGS.scgc6.get() & !(1 << (v as u32))),
+            &Clock::Clock7(v) => SIM_REGS.scgc7.set(SIM_REGS.scgc7.get() & !(1 << (v as u32))),
+        }
     }
 }
 
-impl Clock for Clock2 {
-    fn enable(self) {
-        let regs: &mut Registers = unsafe { mem::transmute(SIM) };
-        regs.scgc2.modify(self);
+pub fn enable_clock(clock: Clock) {
+    match clock {
+        Clock::Clock1(v) => SIM_REGS.scgc1.set(SIM_REGS.scgc1.get() | 1 << (v as u32)),
+        Clock::Clock2(v) => SIM_REGS.scgc2.set(SIM_REGS.scgc2.get() | 1 << (v as u32)),
+        Clock::Clock3(v) => SIM_REGS.scgc3.set(SIM_REGS.scgc3.get() | 1 << (v as u32)),
+        Clock::Clock4(v) => SIM_REGS.scgc4.set(SIM_REGS.scgc4.get() | 1 << (v as u32)),
+        Clock::Clock5(v) => SIM_REGS.scgc5.set(SIM_REGS.scgc5.get() | 1 << (v as u32)),
+        Clock::Clock6(v) => SIM_REGS.scgc6.set(SIM_REGS.scgc6.get() | 1 << (v as u32)),
+        Clock::Clock7(v) => SIM_REGS.scgc7.set(SIM_REGS.scgc7.get() | 1 << (v as u32)),
     }
 }
 
-impl Clock for Clock3 {
-    fn enable(self) {
-        let regs: &mut Registers = unsafe { mem::transmute(SIM) };
-        regs.scgc3.modify(self);
+pub fn disable_clock(clock: Clock) {
+    match clock {
+        Clock::Clock1(v) => SIM_REGS.scgc1.set(SIM_REGS.scgc1.get() & !(1 << (v as u32))),
+        Clock::Clock2(v) => SIM_REGS.scgc2.set(SIM_REGS.scgc2.get() & !(1 << (v as u32))),
+        Clock::Clock3(v) => SIM_REGS.scgc3.set(SIM_REGS.scgc3.get() & !(1 << (v as u32))),
+        Clock::Clock4(v) => SIM_REGS.scgc4.set(SIM_REGS.scgc4.get() & !(1 << (v as u32))),
+        Clock::Clock5(v) => SIM_REGS.scgc5.set(SIM_REGS.scgc5.get() & !(1 << (v as u32))),
+        Clock::Clock6(v) => SIM_REGS.scgc6.set(SIM_REGS.scgc6.get() & !(1 << (v as u32))),
+        Clock::Clock7(v) => SIM_REGS.scgc7.set(SIM_REGS.scgc7.get() & !(1 << (v as u32))),
     }
-}
-
-impl Clock for Clock4 {
-    fn enable(self) {
-        let regs: &mut Registers = unsafe { mem::transmute(SIM) };
-        regs.scgc4.modify(self);
-    }
-}
-
-impl Clock for Clock5 {
-    fn enable(self) {
-        let regs: &mut Registers = unsafe { mem::transmute(SIM) };
-        regs.scgc5.modify(self);
-    }
-}
-
-impl Clock for Clock6 {
-    fn enable(self) {
-        let regs: &mut Registers = unsafe { mem::transmute(SIM) };
-        regs.scgc6.modify(self);
-    }
-}
-
-impl Clock for Clock7 {
-    fn enable(self) {
-        let regs: &mut Registers = unsafe { mem::transmute(SIM) };
-        regs.scgc7.modify(self);
-    }
-}
-
-pub mod clocks {
-    use sim::{Clock1, Clock2, Clock3, Clock4, Clock5, Clock6, Clock7};
-    use regs::sim::*;
-
-    pub const UART4: Clock1 = SystemClockGatingControl1::UART4::SET;
-    pub const I2C2: Clock1 = SystemClockGatingControl1::I2C2::SET;
-    pub const I2C3: Clock1 = SystemClockGatingControl1::I2C3::SET;
-
-    pub const DAC1: Clock2 = SystemClockGatingControl2::DAC1::SET;
-    pub const DAC0: Clock2 = SystemClockGatingControl2::DAC0::SET;
-    pub const TPM2: Clock2 = SystemClockGatingControl2::TPM2::SET;
-    pub const TPM1: Clock2 = SystemClockGatingControl2::TPM1::SET;
-    pub const LPUART0: Clock2 = SystemClockGatingControl2::LPUART0::SET;
-    pub const ENET: Clock2 = SystemClockGatingControl2::ENET::SET;
-
-    pub const ADC1: Clock3 = SystemClockGatingControl3::ADC1::SET;
-    pub const FTM3: Clock3 = SystemClockGatingControl3::FTM3::SET;
-    pub const FTM2: Clock3 = SystemClockGatingControl3::FTM2::SET;
-    pub const SDHC: Clock3 = SystemClockGatingControl3::SDHC::SET;
-    pub const SPI2: Clock3 = SystemClockGatingControl3::SPI2::SET;
-    pub const FLEXCAN1: Clock3 = SystemClockGatingControl3::FLEXCAN1::SET;
-    pub const USBHSDCD: Clock3 = SystemClockGatingControl3::USBHSDCD::SET;
-    pub const USBHSPHY: Clock3 = SystemClockGatingControl3::USBHSPHY::SET;
-    pub const USBHS: Clock3 = SystemClockGatingControl3::USBHS::SET;
-    pub const RNGA: Clock3 = SystemClockGatingControl3::RNGA::SET;
-
-    pub const VREF: Clock4 = SystemClockGatingControl4::VREF::SET;
-    pub const CMP: Clock4 = SystemClockGatingControl4::CMP::SET;
-    pub const USBOTG: Clock4 = SystemClockGatingControl4::USBOTG::SET;
-    pub const UART3: Clock4 = SystemClockGatingControl4::UART3::SET;
-    pub const UART2: Clock4 = SystemClockGatingControl4::UART2::SET;
-    pub const UART1: Clock4 = SystemClockGatingControl4::UART1::SET;
-    pub const UART0: Clock4 = SystemClockGatingControl4::UART0::SET;
-    pub const I2C1: Clock4 = SystemClockGatingControl4::I2C1::SET;
-    pub const I2C0: Clock4 = SystemClockGatingControl4::I2C0::SET;
-    pub const CMT: Clock4 = SystemClockGatingControl4::CMT::SET;
-    pub const EWM: Clock4 = SystemClockGatingControl4::EWM::SET;
-
-    pub const PORTE: Clock5 = SystemClockGatingControl5::PORT::E;
-    pub const PORTD: Clock5 = SystemClockGatingControl5::PORT::D;
-    pub const PORTC: Clock5 = SystemClockGatingControl5::PORT::C;
-    pub const PORTB: Clock5 = SystemClockGatingControl5::PORT::B;
-    pub const PORTA: Clock5 = SystemClockGatingControl5::PORT::A;
-    pub const PORTABCDE: Clock5 = SystemClockGatingControl5::PORT::All;
-    pub const TSI: Clock5 = SystemClockGatingControl5::TSI::SET;
-    pub const LPTMR: Clock5 = SystemClockGatingControl5::LPTMR::SET;
-
-    // DAC0,
-    pub const RTC: Clock6 = SystemClockGatingControl6::RTC::SET;
-    pub const ADC0: Clock6 = SystemClockGatingControl6::ADC0::SET;
-    // FTM2,
-    pub const FTM1: Clock6 = SystemClockGatingControl6::FTM1::SET;
-    pub const FTM0: Clock6 = SystemClockGatingControl6::FTM0::SET;
-    pub const PIT: Clock6 = SystemClockGatingControl6::PIT::SET;
-    pub const PDB: Clock6 = SystemClockGatingControl6::PDB::SET;
-    pub const USBDCD: Clock6 = SystemClockGatingControl6::USBDCD::SET;
-    pub const CRC: Clock6 = SystemClockGatingControl6::CRC::SET;
-    pub const I2S: Clock6 = SystemClockGatingControl6::I2S::SET;
-    pub const SPI1: Clock6 = SystemClockGatingControl6::SPI1::SET;
-    pub const SPI0: Clock6 = SystemClockGatingControl6::SPI0::SET;
-
-    // RNGA,
-    pub const FLEXCAN0: Clock6 = SystemClockGatingControl6::FLEXCAN0::SET;
-    pub const DMAMUX: Clock6 = SystemClockGatingControl6::DMAMUX::SET;
-    pub const FTF: Clock6 = SystemClockGatingControl6::FTF::SET;
-
-    pub const SDRAMC: Clock7 = SystemClockGatingControl7::SDRAMC::SET;
-    pub const MPU: Clock7 = SystemClockGatingControl7::MPU::SET;
-    pub const DMA: Clock7 = SystemClockGatingControl7::DMA::SET;
-    pub const FLEXBUS: Clock7 = SystemClockGatingControl7::FLEXBUS::SET;
 }
 
 pub fn set_dividers(core: u32, bus: u32, flash: u32) {
-    let regs: &mut Registers = unsafe { mem::transmute(SIM) };
+    SIM_REGS.clkdiv1.modify(ClockDivider1::Core.val(core - 1) +
+                            ClockDivider1::Bus.val(bus - 1) +
+                            ClockDivider1::FlexBus.val(bus - 1) +
+                            ClockDivider1::Flash.val(flash - 1));
+}
 
-    regs.clkdiv1.modify(ClockDivider1::Core.val(core - 1) +
-                        ClockDivider1::Bus.val(bus - 1) +
-                        ClockDivider1::FlexBus.val(bus - 1) +
-                        ClockDivider1::Flash.val(flash - 1));
+pub fn deep_sleep_ready() -> bool {
+    // From Table 8-1 and 8-2
+    let clockgate2_mask: FieldValue<u32, SystemClockGatingControl2::Register> =
+        SystemClockGatingControl2::DAC1::SET +
+        SystemClockGatingControl2::DAC0::SET;
+    let clockgate4_mask: FieldValue<u32, SystemClockGatingControl4::Register> =
+        SystemClockGatingControl4::VREF::SET +
+        //SystemClockGatingControl4::UART0::SET +
+        SystemClockGatingControl4::CMP::SET;
+    let clockgate5_mask: FieldValue<u32, SystemClockGatingControl5::Register> =
+        SystemClockGatingControl5::PORTE::SET +
+        SystemClockGatingControl5::PORTD::SET +
+        SystemClockGatingControl5::PORTC::SET +
+        SystemClockGatingControl5::PORTB::SET +
+        SystemClockGatingControl5::PORTA::SET +
+        SystemClockGatingControl5::TSI::SET +
+        SystemClockGatingControl5::LPTMR::SET;
+    let clockgate6_mask: FieldValue<u32, SystemClockGatingControl6::Register> =
+        SystemClockGatingControl6::RTC::SET +
+        SystemClockGatingControl6::DMAMUX::SET +
+        //SystemClockGatingControl6::PIT::SET +
+        SystemClockGatingControl6::FTF::SET; 
+    let clockgate7_mask: FieldValue<u32, SystemClockGatingControl7::Register> =
+        SystemClockGatingControl7::MPU::SET + 
+        SystemClockGatingControl7::DMA::SET;
+    
+    let cg1 = SIM_REGS.scgc1.get() == 0;
+    let cg2 = SIM_REGS.scgc2.get() & !clockgate2_mask.mask() == 0;
+    let cg3 = SIM_REGS.scgc3.get() == 0;
+    let cg4 = SIM_REGS.scgc4.get() & !clockgate4_mask.mask() == 0xf000_0030; 
+    let cg5 = SIM_REGS.scgc5.get() & !clockgate5_mask.mask() == 0x40182;
+    let cg6 = SIM_REGS.scgc6.get() & !clockgate6_mask.mask() == 0x4000_0000; 
+    let cg7 = SIM_REGS.scgc7.get() & !clockgate7_mask.mask() == 0;
+    debug!("cg3:{:x} cg6:{:x}\n", SIM_REGS.scgc3.get(), SIM_REGS.scgc6.get());
+
+    cg1 && cg2 && cg3 && cg4 && cg5 && cg6 && cg7
 }

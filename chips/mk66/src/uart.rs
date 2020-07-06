@@ -8,6 +8,7 @@ use core::mem;
 use nvic;
 use regs::uart::*;
 use clock;
+use sim;
 
 pub struct Uart {
     index: usize,
@@ -145,13 +146,12 @@ impl Uart {
     }
 
     fn enable_clock(&self) {
-        use sim::{clocks, Clock};
         match self.index {
-            0 => clocks::UART0.enable(),
-            1 => clocks::UART1.enable(),
-            2 => clocks::UART2.enable(),
-            3 => clocks::UART3.enable(),
-            4 => clocks::UART4.enable(),
+            0 => sim::enable_clock(sim::Clock::Clock4(sim::ClockGate4::UART0)),
+            1 => sim::enable_clock(sim::Clock::Clock4(sim::ClockGate4::UART1)),
+            2 => sim::enable_clock(sim::Clock::Clock4(sim::ClockGate4::UART2)),
+            3 => sim::enable_clock(sim::Clock::Clock4(sim::ClockGate4::UART3)),
+            4 => sim::enable_clock(sim::Clock::Clock1(sim::ClockGate1::UART4)),
             _ => unreachable!()
         };
     }

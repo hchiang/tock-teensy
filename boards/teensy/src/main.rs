@@ -38,7 +38,7 @@ struct Teensy {
     led: <LedComponent as Component>::Output,
     alarm: <AlarmComponent as Component>::Output,
     spi: <VirtualSpiComponent as Component>::Output,
-    rng: <RngaComponent as Component>::Output,
+    //rng: <RngaComponent as Component>::Output,
     ipc: kernel::ipc::IPC,
 }
 
@@ -57,7 +57,7 @@ impl kernel::Platform for Teensy {
 
             capsules::led::DRIVER_NUM => f(Some(self.led)),
 
-            capsules::rng::DRIVER_NUM => f(Some(self.rng)),
+            //capsules::rng::DRIVER_NUM => f(Some(self.rng)),
 
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
             _ => f(None),
@@ -84,8 +84,11 @@ pub unsafe fn reset_handler() {
     mk66::clock::configure(120);
 
     // Enable the Port Control and Interrupt clocks.
-    use mk66::sim::Clock;
-    mk66::sim::clocks::PORTABCDE.enable();
+    mk66::sim::enable_clock(mk66::sim::Clock::Clock5(mk66::sim::ClockGate5::PORTA));
+    mk66::sim::enable_clock(mk66::sim::Clock::Clock5(mk66::sim::ClockGate5::PORTB));
+    mk66::sim::enable_clock(mk66::sim::Clock::Clock5(mk66::sim::ClockGate5::PORTC));
+    mk66::sim::enable_clock(mk66::sim::Clock::Clock5(mk66::sim::ClockGate5::PORTD));
+    mk66::sim::enable_clock(mk66::sim::Clock::Clock5(mk66::sim::ClockGate5::PORTE));
 
     let (gpio_pins, led_pins) = pins::configure_all_pins();
     kernel::debug::assign_gpios(Some(gpio_pins[24]), Some(gpio_pins[25]), None);
@@ -105,7 +108,7 @@ pub unsafe fn reset_handler() {
     let spi = VirtualSpiComponent::new().finalize().unwrap();
     let alarm = AlarmComponent::new().finalize().unwrap();
     let xconsole = XConsoleComponent::new().finalize().unwrap();
-    let rng = RngaComponent::new().finalize().unwrap();
+    //let rng = RngaComponent::new().finalize().unwrap();
 
     let teensy = Teensy {
         xconsole: xconsole,
@@ -115,7 +118,7 @@ pub unsafe fn reset_handler() {
         led: led,
         alarm: alarm,
         spi: spi,
-        rng: rng,
+        //rng: rng,
         ipc: kernel::ipc::IPC::new(),
     };
 

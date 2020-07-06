@@ -19,6 +19,7 @@ use kernel::common::regs::{ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::hil;
 use kernel::ReturnCode;
+use sim;
 
 /// Representation of an ADC channel on the SAM4L.
 pub struct AdcChannel {
@@ -413,10 +414,9 @@ impl Adc {
     }
 
     pub fn enable_clock(&self) {
-        use sim::{clocks, Clock};
         match self.index {
-            0 => clocks::ADC0.enable(),
-            1 => clocks::ADC1.enable(),
+            0 => sim::enable_clock(sim::Clock::Clock6(sim::ClockGate6::ADC0)),
+            1 => sim::enable_clock(sim::Clock::Clock3(sim::ClockGate3::ADC1)),
             _ => unreachable!()
         };
     }

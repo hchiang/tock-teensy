@@ -1,4 +1,5 @@
 use kernel::common::regs::{ReadWrite, ReadOnly};
+use kernel::common::StaticRef;
 
 #[repr(C)]
 pub struct Registers {
@@ -30,7 +31,7 @@ pub struct Registers {
     pub clkdiv4: ReadWrite<u32>,
 }
 
-pub const SIM: *mut Registers = 0x40048004 as *mut Registers;
+pub const SIM_REGS: StaticRef<Registers> = unsafe { StaticRef::new(0x40048004 as *mut Registers) };
 
 register_bitfields![u32,
     SystemClockGatingControl1 [
@@ -72,16 +73,13 @@ register_bitfields![u32,
         EWM 1
     ],
     SystemClockGatingControl5 [
-        PORT OFFSET(9) NUMBITS(5) [
-            All = 0b11111,
-            A = 0b1,
-            B = 0b10,
-            C = 0b100,
-            D = 0b1000,
-            E = 0b10000
-        ],
-        TSI OFFSET(5) NUMBITS(1) [],
-        LPTMR OFFSET(0) NUMBITS(1) []
+        PORTE 13,
+        PORTD 12,
+        PORTC 11,
+        PORTB 10,
+        PORTA 9,
+        TSI 5,
+        LPTMR 0
     ],
     SystemClockGatingControl6 [
         DAC0 0,

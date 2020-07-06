@@ -19,9 +19,10 @@ pub struct Registers {
     pub rxfifo: [ReadOnly<u32>; 4]
 }
 
-pub const SPI_ADDRS: [*mut Registers; 3] = [0x4002_C000 as *mut Registers,
-                                            0x4002_D000 as *mut Registers,
-                                            0x400A_C000 as *mut Registers];
+pub const SPI_ADDRS: [*mut Registers; 3] = [
+        0x4002_C000 as *mut Registers,
+        0x4002_D000 as *mut Registers,
+        0x400A_C000 as *mut Registers];
 
 register_bitfields![ u32,
     ModuleConfiguration [

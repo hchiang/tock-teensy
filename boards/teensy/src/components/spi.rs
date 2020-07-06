@@ -13,7 +13,7 @@ impl VirtualSpiComponent {
 }
 
 impl Component for VirtualSpiComponent {
-    type Output = &'static Spi<'static, VirtualSpiMasterDevice<'static, mk66::spi::Spi<'static>>>;
+    type Output = &'static Spi<'static, VirtualSpiMasterDevice<'static, mk66::spi::Spi>>;
 
     unsafe fn finalize(&mut self) -> Option<Self::Output> {
         mk66::spi::SPI0.init();
@@ -21,15 +21,15 @@ impl Component for VirtualSpiComponent {
         mk66::spi::SPI2.init();
 
         let mux_spi0 = static_init!(
-                MuxSpiMaster<'static, mk66::spi::Spi<'static>>,
+                MuxSpiMaster<'static, mk66::spi::Spi>,
                 MuxSpiMaster::new(&mk66::spi::SPI0)
             );
         let mux_spi1 = static_init!(
-                MuxSpiMaster<'static, mk66::spi::Spi<'static>>,
+                MuxSpiMaster<'static, mk66::spi::Spi>,
                 MuxSpiMaster::new(&mk66::spi::SPI1)
             );
         let mux_spi2 = static_init!(
-                MuxSpiMaster<'static, mk66::spi::Spi<'static>>,
+                MuxSpiMaster<'static, mk66::spi::Spi>,
                 MuxSpiMaster::new(&mk66::spi::SPI2)
             );
 
@@ -38,14 +38,14 @@ impl Component for VirtualSpiComponent {
         mk66::spi::SPI2.set_client(mux_spi2);
 
         let virtual_spi = static_init!(
-                [VirtualSpiMasterDevice<'static, mk66::spi::Spi<'static>>; 3],
+                [VirtualSpiMasterDevice<'static, mk66::spi::Spi>; 3],
                 [VirtualSpiMasterDevice::new(mux_spi0, 0),
                  VirtualSpiMasterDevice::new(mux_spi1, 0),
                  VirtualSpiMasterDevice::new(mux_spi2, 0)]
             );
 
         let spi = static_init!(
-                Spi<'static, VirtualSpiMasterDevice<'static, mk66::spi::Spi<'static>>>,
+                Spi<'static, VirtualSpiMasterDevice<'static, mk66::spi::Spi>>,
                 Spi::new(virtual_spi)
             );
 

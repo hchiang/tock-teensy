@@ -75,22 +75,7 @@ pub fn state() -> State {
 fn set_pll_freq(freq: u32) {
     let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
 
-    //TODO divisor PRDIV for IRC48MHz
     let (pll_mul, pll_div) = match freq {
-        16 => (16, 8),
-        20 => (20, 8),
-        24 => (24, 8),
-        28 => (28, 8),
-
-        32 => (16, 4),
-        36 => (18, 4),
-        40 => (20, 4),
-        44 => (22, 4),
-        48 => (24, 4),
-        52 => (26, 4),
-        56 => (28, 4),
-        60 => (30, 4),
-
         64 => (16, 2),
         68 => (17, 2),
         72 => (18, 2),
@@ -106,6 +91,15 @@ fn set_pll_freq(freq: u32) {
         112 => (28, 2),
         116 => (29, 2),
         120 => (30, 2),
+
+        128 => (16, 1),
+        136 => (17, 1),
+        144 => (18, 1),
+        152 => (19, 1),
+        160 => (20, 1),
+        168 => (21, 1),
+        176 => (22, 1),
+
         _ => panic!("Invalid pll frequency selected!")
     };
 

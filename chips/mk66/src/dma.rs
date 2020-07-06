@@ -7,6 +7,7 @@ use core::cell::Cell;
 use kernel::common::cells::OptionalCell;
 use kernel::common::regs::{ReadOnly, ReadWrite, WriteOnly};
 use kernel::common::StaticRef;
+use sim;
 
 /// DMA memory map. Section 24.3.4 of the datasheet.
 #[repr(C)]
@@ -407,9 +408,8 @@ impl DMAChannel {
 
         unsafe {
         if CHANNELS_ENABLED == 0 {
-            use sim::{clocks, Clock};
-            clocks::DMAMUX.enable();
-            clocks::DMA.enable();
+            sim::enable_clock(sim::Clock::Clock6(sim::ClockGate6::DMAMUX));
+            sim::enable_clock(sim::Clock::Clock7(sim::ClockGate7::DMA));
             registers.cr.modify(ControlRegister::EMLM::SET);
         }
         CHANNELS_ENABLED = CHANNELS_ENABLED + 1;
@@ -441,10 +441,8 @@ impl DMAChannel {
         unsafe {
         CHANNELS_ENABLED = CHANNELS_ENABLED - 1;
         if CHANNELS_ENABLED == 0 {
-            //TODO rewrite sim to implement disable
-            //use sim::{clocks, Clock};
-            //clocks::DMA.disable();
-            //clocks::DMAMUX.disable();
+            sim::disable_clock(sim::Clock::Clock7(sim::ClockGate7::DMA));
+            sim::disable_clock(sim::Clock::Clock6(sim::ClockGate6::DMAMUX));
         }
         }
     }
