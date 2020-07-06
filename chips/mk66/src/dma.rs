@@ -440,10 +440,6 @@ impl DMAChannel {
 
         unsafe {
         CHANNELS_ENABLED = CHANNELS_ENABLED - 1;
-        if CHANNELS_ENABLED == 0 {
-            sim::disable_clock(sim::Clock::Clock7(sim::ClockGate7::DMA));
-            sim::disable_clock(sim::Clock::Clock6(sim::ClockGate6::DMAMUX));
-        }
         }
     }
 

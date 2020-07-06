@@ -413,6 +413,14 @@ impl Adc {
         self.rx_dma.set(rx_dma);
     }
 
+    pub fn disable_clock(&self) {
+        match self.index {
+            0 => sim::disable_clock(sim::Clock::Clock6(sim::ClockGate6::ADC0)),
+            1 => sim::disable_clock(sim::Clock::Clock3(sim::ClockGate3::ADC1)),
+            _ => unreachable!()
+        };
+    }
+
     pub fn enable_clock(&self) {
         match self.index {
             0 => sim::enable_clock(sim::Clock::Clock6(sim::ClockGate6::ADC0)),
@@ -504,6 +512,7 @@ impl Adc {
                 if !self.continuous.get() {
                     self.active.set(false);
                     regs.sc1a.modify(Control::AIEN::CLEAR);
+                    self.disable_clock();
                 }
             }
         } else {
@@ -522,7 +531,9 @@ impl hil::adc::Adc for Adc {
     /// This can be called multiple times with no side effects.
     fn initialize(&self) -> ReturnCode {
         self.enable_clock();
-        self.calibrate()
+        let val = self.calibrate();
+        self.disable_clock();
+        val
     }
 
     /// Capture a single analog sample, calling the client when complete.
@@ -538,6 +549,7 @@ impl hil::adc::Adc for Adc {
         } else {
             self.active.set(true);
             self.continuous.set(false);
+            self.enable_clock();
 
             // divide clock by 1, select short sample time, select 12 bit conversion, select bus clock as input
             regs.cfg1.write(Configuration1::ADIV::Div1 + Configuration1::ADLSMP::Short + 
@@ -576,6 +588,7 @@ impl hil::adc::Adc for Adc {
         } else {
             self.active.set(true);
             self.continuous.set(true);
+            self.enable_clock();
 
             self.set_clock_divisor(frequency);
 
@@ -619,6 +632,7 @@ impl hil::adc::Adc for Adc {
             regs.sc3.modify(StatusControl3::ADCO::One);
             regs.sc2.modify(StatusControl2::DMAEN::CLEAR);
             regs.sc1a.modify(Control::AIEN::CLEAR);
+            self.disable_clock();
 
             // stop DMA transfer if going. 
             self.rx_dma.map(|rx_dma| {
@@ -674,6 +688,7 @@ impl hil::adc::AdcHighSpeed for Adc {
         } else {
             self.active.set(true);
             self.continuous.set(true);
+            self.enable_clock();
 
             self.set_clock_divisor(frequency);
 

@@ -176,7 +176,6 @@ pub fn deep_sleep_ready() -> bool {
         SystemClockGatingControl2::DAC0::SET;
     let clockgate4_mask: FieldValue<u32, SystemClockGatingControl4::Register> =
         SystemClockGatingControl4::VREF::SET +
-        //SystemClockGatingControl4::UART0::SET +
         SystemClockGatingControl4::CMP::SET;
     let clockgate5_mask: FieldValue<u32, SystemClockGatingControl5::Register> =
         SystemClockGatingControl5::PORTE::SET +

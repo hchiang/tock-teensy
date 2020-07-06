@@ -10,13 +10,22 @@ use regs::uart::*;
 use clock;
 use sim;
 
+#[derive(Copy, Clone, PartialEq)]
+pub enum  UartState {
+    Idle,
+    Receiving,
+    Transmitting,
+}
+
 pub struct Uart {
     index: usize,
     registers: *mut Registers,
     client: Cell<Option<&'static uart::Client>>,
-    buffer: TakeCell<'static, [u8]>,
+    tx_buffer: TakeCell<'static, [u8]>,
+    rx_buffer: TakeCell<'static, [u8]>,
     rx_len: Cell<usize>,
-    rx_index: Cell<usize>
+    rx_index: Cell<usize>,
+    state: Cell<UartState>
 }
 
 pub static mut UART0: Uart = Uart::new(0);
@@ -31,22 +40,24 @@ impl Uart {
             index: index,
             registers: UART_BASE_ADDRS[index],
             client: Cell::new(None),
-            buffer: TakeCell::empty(),
+            tx_buffer: TakeCell::empty(),
+            rx_buffer: TakeCell::empty(),
             rx_len: Cell::new(0),
             rx_index: Cell::new(0),
+            state: Cell::new(UartState::Idle),
         }
     }
 
     pub fn handle_interrupt(&self) {
         let regs: &mut Registers = unsafe { mem::transmute(self.registers) };
         // Read byte from data register; reading S1 and D clears interrupt
-        if regs.s1.is_set(Status1::RDRF) {
+        if self.state.get() == UartState::Receiving && regs.s1.is_set(Status1::RDRF) {
             let datum: u8 = regs.d.get();
 
             // Put byte into buffer, trigger callback if buffer full
             let mut done = false;
             let mut index = self.rx_index.get();
-            self.buffer.map( |buf| {
+            self.rx_buffer.map( |buf| {
                 buf[index] = datum;
                 index = index + 1;
                 if index >= self.rx_len.get() {
@@ -55,14 +66,28 @@ impl Uart {
                 self.rx_index.set(index);
             });
             if done {
+                self.state.set(UartState::Idle);
+                self.disable_rx_interrupts();
                 self.client.get().map(|client| {
-                    match self.buffer.take() {
+                    match self.rx_buffer.take() {
                         Some(buf) => client.receive_complete(buf, index, uart::Error::CommandComplete),
                         None => ()
                     }
                 });
                 self.disable_clock();
             }
+        }
+
+        if self.state.get() == UartState::Transmitting && self.tx_ready() {
+            self.state.set(UartState::Idle);
+            self.disable_tx_interrupts();
+            self.client.get().map(move |client|
+                match self.tx_buffer.take() {
+                    Some(buf) => client.transmit_complete(buf, uart::Error::CommandComplete),
+                    None => ()
+                }
+            );
+            self.disable_clock();
         }
     }
 
@@ -129,21 +154,28 @@ impl Uart {
         let regs: &mut Registers = unsafe { mem::transmute(self.registers) };
         regs.rwfifo.set(1);               // Issue interrupt on each byte
         regs.c5.modify(Control5::RDMAS::CLEAR); // Issue interrupt on RX data
-
-        match self.index {
-            0 => unsafe {nvic::enable(nvic::NvicIdx::UART0)},
-            1 => unsafe {nvic::enable(nvic::NvicIdx::UART1)},
-            2 => unsafe {nvic::enable(nvic::NvicIdx::UART2)},
-            3 => unsafe {nvic::enable(nvic::NvicIdx::UART3)},
-            4 => unsafe {nvic::enable(nvic::NvicIdx::UART4)},
-            _ => unreachable!()
-        };
         regs.c2.modify(Control2::RIE::SET);     // Enable interrupts
+    }
+
+    pub fn disable_rx_interrupts(&self) {
+        let regs: &mut Registers = unsafe { mem::transmute(self.registers) };
+        regs.c2.modify(Control2::RIE::CLEAR);    
     }
 
     pub fn enable_tx(&self) {
         let regs: &mut Registers = unsafe { mem::transmute(self.registers) };
         regs.c2.modify(Control2::TE::SET);
+    }
+
+    pub fn enable_tx_interrupts(&self) {
+        let regs: &mut Registers = unsafe { mem::transmute(self.registers) };
+        regs.c5.modify(Control5::TDMAS::CLEAR); // Issue interrupt on TX data
+        regs.c2.modify(Control2::TIE::SET);
+    }
+
+    pub fn disable_tx_interrupts(&self) {
+        let regs: &mut Registers = unsafe { mem::transmute(self.registers) };
+        regs.c2.modify(Control2::TIE::CLEAR);
     }
 
     fn disable_clock(&self) {
@@ -190,42 +222,48 @@ impl hil::uart::UART for Uart {
 
     fn init(&self, params: uart::UARTParams) {
         self.enable_clock();
+        match self.index {
+            0 => unsafe {nvic::enable(nvic::NvicIdx::UART0)},
+            1 => unsafe {nvic::enable(nvic::NvicIdx::UART1)},
+            2 => unsafe {nvic::enable(nvic::NvicIdx::UART2)},
+            3 => unsafe {nvic::enable(nvic::NvicIdx::UART3)},
+            4 => unsafe {nvic::enable(nvic::NvicIdx::UART4)},
+            _ => unreachable!()
+        };
 
         self.set_parity(params.parity);
         self.set_stop_bits(params.stop_bits);
         self.set_baud_rate(params.baud_rate);
 
-        self.enable_rx();
-        self.enable_rx_interrupts();
-        self.enable_tx();
-
         self.disable_clock();
     }
 
     fn transmit(&self, tx_data: &'static mut [u8], tx_len: usize) {
+        self.state.set(UartState::Transmitting);
         self.enable_clock();
+        self.enable_tx();
+        self.enable_tx_interrupts();
+
         // This basic procedure outlined in section 59.9.3.
         for i in 0..tx_len {
             self.send_byte(tx_data[i]);
         }
-
-        while !self.tx_ready() {}
-
-        self.client.get().map(move |client|
-            client.transmit_complete(tx_data, uart::Error::CommandComplete)
-        );
-        self.disable_clock();
+        self.tx_buffer.put(Some(tx_data));
     }
 
     #[allow(unused_variables)]
     fn receive(&self, rx_buffer: &'static mut [u8], rx_len: usize) {
+        self.state.set(UartState::Receiving);
         self.enable_clock();
+        self.enable_rx();
+        self.enable_rx_interrupts();
+
         let mut length = rx_len;
         if rx_len > rx_buffer.len() {
             length = rx_buffer.len();
         }
 
-        self.buffer.put(Some(rx_buffer));
+        self.rx_buffer.put(Some(rx_buffer));
         self.rx_len.set(length);
         self.rx_index.set(0);
     }

@@ -33,9 +33,6 @@ impl Component for XConsoleComponent {
             );
         kernel::debug::assign_console_driver(Some(xconsole), kc);
 
-        mk66::uart::UART0.enable_rx();
-        mk66::uart::UART0.enable_rx_interrupts();
-
         Some(xconsole)
     }
 }

@@ -109,6 +109,7 @@ impl<'a> Rnga<'a> {
 
         // stop rnga
         regs.control.modify(Control::SLP::SET);
+        sim::disable_clock(sim::Clock::Clock6(sim::ClockGate6::RNGA));
     }
 
 
