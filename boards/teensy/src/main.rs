@@ -97,6 +97,7 @@ pub unsafe fn reset_handler() {
     debug_gpio!(1, make_output);
     debug_gpio!(1, clear);
 
+    let xconsole = XConsoleComponent::new().finalize().unwrap();
     let adc = AdcComponent::new().finalize().unwrap();
     let nonvolatile_storage = NonvolatileStorageComponent::new().finalize().unwrap();
     let gpio = GpioComponent::new()
@@ -105,9 +106,8 @@ pub unsafe fn reset_handler() {
     let led = LedComponent::new()
                            .dependency(led_pins)
                            .finalize().unwrap();
-    let spi = VirtualSpiComponent::new().finalize().unwrap();
     let alarm = AlarmComponent::new().finalize().unwrap();
-    let xconsole = XConsoleComponent::new().finalize().unwrap();
+    let spi = VirtualSpiComponent::new().finalize().unwrap();
     //let rng = RngaComponent::new().finalize().unwrap();
 
     let teensy = Teensy {

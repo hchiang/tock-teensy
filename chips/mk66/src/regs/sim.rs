@@ -82,7 +82,7 @@ register_bitfields![u32,
         LPTMR 0
     ],
     SystemClockGatingControl6 [
-        DAC0 0,
+        DAC0 31,
         RTC 29,
         ADC0 27,
         FTM2 26,

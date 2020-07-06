@@ -22,6 +22,7 @@ pub struct Spi {
     write: TakeCell<'static, [u8]>,
     read: TakeCell<'static, [u8]>,
     transfer_len: Cell<usize>,
+    running: Cell<bool>,
 }
 
 pub static mut SPI0: Spi = Spi::new(0);
@@ -40,7 +41,7 @@ impl PeripheralManagement<sim::Clock> for Spi {
             0 => &sim::Clock::Clock6(sim::ClockGate6::SPI0),
             1 => &sim::Clock::Clock6(sim::ClockGate6::SPI1),
             2 => &sim::Clock::Clock3(sim::ClockGate3::SPI2),
-            _ => &sim::Clock::Clock6(sim::ClockGate6::SPI0),
+            _ => unreachable!()
         }
     }
 
@@ -49,7 +50,7 @@ impl PeripheralManagement<sim::Clock> for Spi {
     }
 
     fn after_peripheral_access(&self, clock: &sim::Clock, registers: &Registers) {
-        if registers.mcr.is_set(ModuleConfiguration::MDIS) {
+        if !self.running.get() {
             clock.disable();
         }
     }
@@ -72,6 +73,7 @@ impl Spi {
             write: TakeCell::empty(),
             read: TakeCell::empty(),
             transfer_len: Cell::new(0),
+            running: Cell::new(false),
         }
     }
 
@@ -90,25 +92,22 @@ impl Spi {
         spi.registers.sr.is_set(Status::TXRS)
     }
 
-    pub fn halt(&self) {
-        let spi = &SpiRegisterManager::new(&self);
+    pub fn halt(&self, spi: &SpiRegisterManager) {
         spi.registers.mcr.modify(ModuleConfiguration::HALT::SET);
         while self.is_running() {}
     }
 
-    pub fn resume(&self) {
-        let spi = &SpiRegisterManager::new(&self);
+    pub fn resume(&self, spi: &SpiRegisterManager) {
         spi.registers.mcr.modify(ModuleConfiguration::HALT::CLEAR);
     }
 
     fn set_client(&self, client: &'static SpiMasterClient) {
-        let spi = &SpiRegisterManager::new(&self);
         self.client.set(Some(client));
     }
 
     fn set_role(&self, role: SpiRole) {
         let spi = &SpiRegisterManager::new(&self);
-        self.halt();
+        self.halt(spi);
         match role {
             SpiRole::Master => {
                 spi.registers.mcr.modify(ModuleConfiguration::MSTR::Master);
@@ -117,7 +116,7 @@ impl Spi {
                 spi.registers.mcr.modify(ModuleConfiguration::MSTR::Slave);
             }
         }
-        self.resume();
+        self.resume(spi);
     }
 
     fn set_polarity(&self, polarity: ClockPolarity) {
@@ -126,9 +125,9 @@ impl Spi {
             ClockPolarity::IdleHigh => ClockAndTransferAttributes::CPOL::IdleHigh,
             ClockPolarity::IdleLow => ClockAndTransferAttributes::CPOL::IdleLow
         };
-        self.halt();
+        self.halt(spi);
         spi.registers.ctar0.modify(cpol);
-        self.resume();
+        self.resume(spi);
     }
 
     fn get_polarity(&self) -> ClockPolarity {
@@ -146,9 +145,9 @@ impl Spi {
             ClockPhase::SampleLeading => ClockAndTransferAttributes::CPHA::SampleLeading,
             ClockPhase::SampleTrailing => ClockAndTransferAttributes::CPHA::SampleTrailing
         };
-        self.halt();
+        self.halt(spi);
         spi.registers.ctar0.modify(cpha);
-        self.resume();
+        self.resume(spi);
     }
 
     fn get_phase(&self) -> ClockPhase {
@@ -166,9 +165,9 @@ impl Spi {
             DataOrder::LSBFirst => ClockAndTransferAttributes::LSBFE::LsbFirst,
             DataOrder::MSBFirst => ClockAndTransferAttributes::LSBFE::MsbFirst
         };
-        self.halt();
+        self.halt(spi);
         spi.registers.ctar0.modify(order);
-        self.resume();
+        self.resume(spi);
     }
 
     pub fn get_data_order(&self) -> DataOrder {
@@ -200,16 +199,17 @@ impl Spi {
 
     fn flush_tx_fifo(&self) {
         let spi = &SpiRegisterManager::new(&self);
-        self.halt();
+        self.halt(spi);
         spi.registers.mcr.modify(ModuleConfiguration::CLR_TXF::SET);
-        self.resume();
+        self.resume(spi);
     }
 
     fn flush_rx_fifo(&self) {
         let spi = &SpiRegisterManager::new(&self);
-        self.halt();
+        self.halt(spi);
         spi.registers.mcr.modify(ModuleConfiguration::CLR_RXF::SET);
-        self.resume();
+        while spi.registers.sr.is_set(Status::RFDF) {}
+        self.resume(spi);
     }
 
     fn tx_fifo_ready(&self) -> bool {
@@ -268,11 +268,11 @@ impl Spi {
         }
 
         let spi = &SpiRegisterManager::new(&self);
-        self.halt();
+        self.halt(spi);
         spi.registers.ctar0.modify(ClockAndTransferAttributes::DBR.val(dbl as u32) +
                                  ClockAndTransferAttributes::PBR.val(prescaler as u32) +
                                  ClockAndTransferAttributes::BR.val(scaler as u32));
-        self.resume();
+        self.resume(spi);
 
         Spi::baud_rate(dbls[dbl], prescalers[prescaler], scalers[scaler])
     }
@@ -316,19 +316,19 @@ impl Spi {
 
     fn configure_timing(&self) {
         let spi = &SpiRegisterManager::new(&self);
-        self.halt();
+        self.halt(spi);
         // Set maximum delay after transfer.
         spi.registers.ctar0.modify(ClockAndTransferAttributes::DT.val(0x0) + ClockAndTransferAttributes::PDT::Delay7);
-        self.resume();
+        self.resume(spi);
     }
 
     fn set_frame_size(&self, size: u32) {
         let spi = &SpiRegisterManager::new(&self);
         if size > 16 || size < 4 { return }
 
-        self.halt();
+        self.halt(spi);
         spi.registers.ctar0.modify(ClockAndTransferAttributes::FMSZ.val(size - 1));
-        self.resume();
+        self.resume(spi);
     }
 
     fn enable_interrupt(&self) {
@@ -340,12 +340,12 @@ impl Spi {
             _ => unreachable!()
         };
 
-        self.halt();
+        self.halt(spi);
         unsafe {
             nvic::enable(idx);
         }
         spi.registers.rser.modify(RequestSelectAndEnable::EOQF_RE::SET);
-        self.resume();
+        self.resume(spi);
     }
 
     pub fn handle_interrupt(&self) {
@@ -362,8 +362,24 @@ impl Spi {
                     None => ()
                 };
             });
+            self.running.set(false);
+        }
+    }
 
-            self.disable();
+    fn enable_clock(&self) {
+        match self.index {
+            0 => sim::enable_clock(sim::Clock::Clock6(sim::ClockGate6::SPI0)),
+            1 => sim::enable_clock(sim::Clock::Clock6(sim::ClockGate6::SPI1)),
+            2 => sim::enable_clock(sim::Clock::Clock3(sim::ClockGate3::SPI2)),
+            _ => unreachable!()
+        }
+    }
+    fn disable_clock(&self) {
+        match self.index {
+            0 => sim::disable_clock(sim::Clock::Clock6(sim::ClockGate6::SPI0)),
+            1 => sim::disable_clock(sim::Clock::Clock6(sim::ClockGate6::SPI1)),
+            2 => sim::disable_clock(sim::Clock::Clock3(sim::ClockGate3::SPI2)),
+            _ => unreachable!()
         }
     }
 }
@@ -377,6 +393,8 @@ impl SpiMaster for Spi {
 
     fn init(&self) {
         let spi = &SpiRegisterManager::new(&self);
+        self.enable();
+
         // Section 57.6.2
         self.flush_rx_fifo();
         self.flush_tx_fifo();
@@ -405,7 +423,7 @@ impl SpiMaster for Spi {
                         len: usize)
                         -> ReturnCode {
 
-        self.enable();
+        self.running.set(true);
         let spi = &SpiRegisterManager::new(&self);
         self.start_of_queue();
         if let Some(rbuf) = read_buffer {
@@ -479,10 +497,10 @@ impl SpiMaster for Spi {
         let new_cs = cs as usize;
 
         // Swap in the new configuration.
-        self.halt();
+        self.halt(spi);
         self.chip_select_settings[old_cs].set(spi.registers.ctar0.get());
         spi.registers.ctar0.set(self.chip_select_settings[new_cs].get());
-        self.resume();
+        self.resume(spi);
         spi.registers.pushr_cmd.modify(TxFifoPushCommand::PCS.val(1 << new_cs));
     }
 

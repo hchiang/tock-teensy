@@ -71,7 +71,7 @@ impl<'a> Rnga<'a> {
 
     pub fn init(&mut self) {
         // set clock gate
-        sim::enable_clock(sim::Clock::Clock3(sim::ClockGate3::RNGA));
+        sim::enable_clock(sim::Clock::Clock6(sim::ClockGate6::RNGA));
 
         // start rnga
         let regs = unsafe { &*self.regs };
