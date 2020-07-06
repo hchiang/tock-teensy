@@ -37,7 +37,7 @@ struct Teensy {
     gpio: <GpioComponent as Component>::Output,
     led: <LedComponent as Component>::Output,
     alarm: <AlarmComponent as Component>::Output,
-    spi: <VirtualSpiComponent as Component>::Output,
+    //spi: <VirtualSpiComponent as Component>::Output,
     //rng: <RngaComponent as Component>::Output,
     ipc: kernel::ipc::IPC,
 }
@@ -53,7 +53,7 @@ impl kernel::Platform for Teensy {
             capsules::gpio::DRIVER_NUM => f(Some(self.gpio)),
 
             capsules::alarm::DRIVER_NUM => f(Some(self.alarm)),
-            spi::DRIVER_NUM => f(Some(self.spi)),
+            //spi::DRIVER_NUM => f(Some(self.spi)),
 
             capsules::led::DRIVER_NUM => f(Some(self.led)),
 
@@ -107,7 +107,7 @@ pub unsafe fn reset_handler() {
                            .dependency(led_pins)
                            .finalize().unwrap();
     let alarm = AlarmComponent::new().finalize().unwrap();
-    let spi = VirtualSpiComponent::new().finalize().unwrap();
+    //let spi = VirtualSpiComponent::new().finalize().unwrap();
     //let rng = RngaComponent::new().finalize().unwrap();
 
     let teensy = Teensy {
@@ -117,7 +117,7 @@ pub unsafe fn reset_handler() {
         gpio: gpio,
         led: led,
         alarm: alarm,
-        spi: spi,
+        //spi: spi,
         //rng: rng,
         ipc: kernel::ipc::IPC::new(),
     };

@@ -61,6 +61,7 @@ impl Uart {
                         None => ()
                     }
                 });
+                self.disable_clock();
             }
         }
     }
@@ -145,6 +146,17 @@ impl Uart {
         regs.c2.modify(Control2::TE::SET);
     }
 
+    fn disable_clock(&self) {
+        match self.index {
+            0 => sim::disable_clock(sim::Clock::Clock4(sim::ClockGate4::UART0)),
+            1 => sim::disable_clock(sim::Clock::Clock4(sim::ClockGate4::UART1)),
+            2 => sim::disable_clock(sim::Clock::Clock4(sim::ClockGate4::UART2)),
+            3 => sim::disable_clock(sim::Clock::Clock4(sim::ClockGate4::UART3)),
+            4 => sim::disable_clock(sim::Clock::Clock1(sim::ClockGate1::UART4)),
+            _ => unreachable!()
+        };
+    }
+
     fn enable_clock(&self) {
         match self.index {
             0 => sim::enable_clock(sim::Clock::Clock4(sim::ClockGate4::UART0)),
@@ -186,9 +198,12 @@ impl hil::uart::UART for Uart {
         self.enable_rx();
         self.enable_rx_interrupts();
         self.enable_tx();
+
+        self.disable_clock();
     }
 
     fn transmit(&self, tx_data: &'static mut [u8], tx_len: usize) {
+        self.enable_clock();
         // This basic procedure outlined in section 59.9.3.
         for i in 0..tx_len {
             self.send_byte(tx_data[i]);
@@ -199,10 +214,12 @@ impl hil::uart::UART for Uart {
         self.client.get().map(move |client|
             client.transmit_complete(tx_data, uart::Error::CommandComplete)
         );
+        self.disable_clock();
     }
 
     #[allow(unused_variables)]
     fn receive(&self, rx_buffer: &'static mut [u8], rx_len: usize) {
+        self.enable_clock();
         let mut length = rx_len;
         if rx_len > rx_buffer.len() {
             length = rx_buffer.len();
