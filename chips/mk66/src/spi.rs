@@ -5,7 +5,6 @@ use kernel::common::cells::TakeCell;
 use kernel::common::peripherals::{PeripheralManagement, PeripheralManager};
 use sim;
 use core::cell::Cell;
-use core::mem;
 use clock;
 use nvic::{self, NvicIdx};
 

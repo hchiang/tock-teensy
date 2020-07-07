@@ -12,17 +12,17 @@ impl AlarmComponent {
 }
 
 impl Component for AlarmComponent {
-    type Output = &'static AlarmDriver<'static, mk66::pit::Pit<'static>>;
+    type Output = &'static AlarmDriver<'static, mk66::lptmr::Lptmr<'static>>;
 
     unsafe fn finalize(&mut self) -> Option<Self::Output> {
-        mk66::pit::PIT.init();
+        mk66::lptmr::LPTMR.init();
 
         let alarm = static_init!(
-                AlarmDriver<'static, mk66::pit::Pit>,
-                AlarmDriver::new(&mk66::pit::PIT,
+                AlarmDriver<'static, mk66::lptmr::Lptmr>,
+                AlarmDriver::new(&mk66::lptmr::LPTMR,
                                  kernel::Grant::create())
             );
-        mk66::pit::PIT.set_client(alarm);
+        mk66::lptmr::LPTMR.set_client(alarm);
         Some(alarm)
     }
 }

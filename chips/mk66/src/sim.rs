@@ -1,6 +1,4 @@
 //! Implementation of the MK66 System Integration Module
-
-use core::mem;
 use regs::sim::*;
 use kernel::common::regs::FieldValue;
 use kernel::ClockInterface;
@@ -188,7 +186,6 @@ pub fn deep_sleep_ready() -> bool {
     let clockgate6_mask: FieldValue<u32, SystemClockGatingControl6::Register> =
         SystemClockGatingControl6::RTC::SET +
         SystemClockGatingControl6::DMAMUX::SET +
-        //SystemClockGatingControl6::PIT::SET +
         SystemClockGatingControl6::FTF::SET; 
     let clockgate7_mask: FieldValue<u32, SystemClockGatingControl7::Register> =
         SystemClockGatingControl7::MPU::SET + 
@@ -201,7 +198,6 @@ pub fn deep_sleep_ready() -> bool {
     let cg5 = SIM_REGS.scgc5.get() & !clockgate5_mask.mask() == 0x40182;
     let cg6 = SIM_REGS.scgc6.get() & !clockgate6_mask.mask() == 0x4000_0000; 
     let cg7 = SIM_REGS.scgc7.get() & !clockgate7_mask.mask() == 0;
-    debug!("cg3:{:x} cg6:{:x}\n", SIM_REGS.scgc3.get(), SIM_REGS.scgc6.get());
 
     cg1 && cg2 && cg3 && cg4 && cg5 && cg6 && cg7
 }

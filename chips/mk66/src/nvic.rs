@@ -75,7 +75,7 @@ pub const USBFS_CHARGE: u32 = 54;
 pub const _RESERVED1: u32 = 55;
 pub const DAC0: u32 = 56;
 pub const MCG: u32 = 57;
-pub const LOWPOWERTIER: u32 = 58;
+pub const LPTMR: u32 = 58;
 pub const PCMA: u32 = 59;
 pub const PCMB: u32 = 60;
 pub const PCMC: u32 = 61;
@@ -181,7 +181,7 @@ pub enum NvicIdx {
     _RESERVED1,
     DAC0,
     MCG,
-    LOWPOWERTIMER,
+    LPTMR,
     PCMA,
     PCMB,
     PCMC,

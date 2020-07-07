@@ -34,6 +34,8 @@ pub mod clock;
 pub mod pit;
 pub mod spi;
 pub mod mpu;
+pub mod smc;
+pub mod lptmr;
 
 #[allow(while_true)]
 pub mod rnga;

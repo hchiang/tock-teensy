@@ -8,6 +8,7 @@ use dma;
 use adc;
 use flash;
 use sim;
+use lptmr;
 use deferred_call_tasks::Task;
 use nvic;
 
@@ -69,6 +70,7 @@ impl Chip for MK66 {
                     SPI2 => spi::SPI2.handle_interrupt(),
                     UART0 => uart::UART0.handle_interrupt(),
                     UART1 => uart::UART1.handle_interrupt(),
+                    LPTMR=> lptmr::LPTMR.handle_interrupt(),
                     _ => {}
                 }
 
