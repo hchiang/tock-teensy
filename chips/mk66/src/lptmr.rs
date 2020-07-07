@@ -50,6 +50,7 @@ pub struct Lptmr<'a> {
     pub client: Cell<Option<&'a Client>>,
     alarm: Cell<u32>,
     registers: StaticRef<LptmrRegisters>,
+    rtc: Cell<u16>,
 }
 
 impl<'a> Lptmr<'a> {
@@ -58,6 +59,7 @@ impl<'a> Lptmr<'a> {
             client: Cell::new(None),
             alarm: Cell::new(0),
             registers: LPTMR_ADDRS,
+            rtc: Cell::new(0),
         }
     }
 
@@ -148,12 +150,13 @@ impl<'a> Time for Lptmr<'a> {
 
 impl<'a> Alarm for Lptmr<'a> {
     fn now(&self) -> u32 {
-        self.alarm.get()
+        self.rtc.get() as u32
     }
 
     fn set_alarm(&self, ticks: u32) {
         Time::disable(self);
         self.alarm.set(ticks.wrapping_sub(self.now()));
+        self.rtc.set(ticks as u16);
         self.set_counter(self.alarm.get());
         self.enable_interrupt();
         self.enable();
