@@ -68,7 +68,7 @@ impl<'a> Lptmr<'a> {
         let regs: &LptmrRegisters = &*self.registers;
 
         // these values should only be altered when LPTMR is disabled
-        // CNR is reset whenever counter value is reached, LPTMR in counter mode
+        // CNR is reset when CMR is reached, LPTMR in counter mode
         regs.csr.modify(ControlStatus::TFC::CLEAR + ControlStatus::TMS::CLEAR);
         // Bypass prescaler, select LPO as clock
         regs.psr.modify(Prescale::PBYP::SET + Prescale::PCS::LPO);
@@ -148,7 +148,7 @@ impl<'a> Time for Lptmr<'a> {
 
 impl<'a> Alarm for Lptmr<'a> {
     fn now(&self) -> u32 {
-        self.get_counter()
+        self.alarm.get()
     }
 
     fn set_alarm(&self, ticks: u32) {

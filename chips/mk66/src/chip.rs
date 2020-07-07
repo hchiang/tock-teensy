@@ -9,6 +9,7 @@ use adc;
 use flash;
 use sim;
 use lptmr;
+use smc;
 use deferred_call_tasks::Task;
 use nvic;
 
@@ -95,6 +96,7 @@ impl Chip for MK66 {
 
     fn sleep(&self) {
         if sim::deep_sleep_ready() {
+            smc::set_vlps();
             unsafe {
                 cortexm4::scb::set_sleepdeep();
             }
