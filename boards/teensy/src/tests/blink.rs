@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use mk66::{gpio, clock};
+use mk66::{gpio};
 use mk66::gpio::*;
 
 fn delay() {

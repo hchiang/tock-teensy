@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use mk66::{clock, spi};
+use mk66::{mcg, spi};
 use kernel::hil::spi::*;
 use tests::{blink, alarm};
 
@@ -32,7 +32,7 @@ pub fn spi_test() {
 
         let rate = spi::SPI1.set_rate(20_000_000);
         println!("Baud rate: {}", rate);
-        println!("Bus clock: {}", clock::bus_clock_hz());
+        println!("Bus clock: {}", mcg::bus_clock_hz());
     }
 
     alarm::loop_500ms(|| {

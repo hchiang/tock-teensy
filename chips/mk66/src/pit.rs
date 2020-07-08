@@ -3,7 +3,7 @@ use core::mem;
 use core::cell::Cell;
 use kernel::hil::time::{Client, Time, Alarm, Frequency};
 use nvic;
-use clock::peripheral_clock_hz;
+use mcg::peripheral_clock_hz;
 use sim;
 
 pub static mut PIT: Pit<'static> = Pit::new();

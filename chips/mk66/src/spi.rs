@@ -5,7 +5,7 @@ use kernel::common::cells::TakeCell;
 use kernel::common::peripherals::{PeripheralManagement, PeripheralManager};
 use sim;
 use core::cell::Cell;
-use clock;
+use mcg;
 use nvic::{self, NvicIdx};
 
 pub enum SpiRole {
@@ -222,7 +222,7 @@ impl Spi {
     }
 
     fn baud_rate(dbl: u32, prescaler: u32, scaler: u32) -> u32 {
-        (clock::bus_clock_hz() * (1 + dbl)) / (prescaler * scaler)
+        (mcg::bus_clock_hz() * (1 + dbl)) / (prescaler * scaler)
     }
 
     fn set_baud_rate(&self, rate: u32) -> u32 {

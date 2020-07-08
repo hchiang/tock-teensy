@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use mk66::{gpio, clock, pit};
+use mk66::{gpio, pit};
 use kernel::hil::time::{Time, Alarm, Frequency, Client};
 use tests::blink;
 

@@ -7,7 +7,7 @@ use kernel::hil::uart;
 use core::mem;
 use nvic;
 use regs::uart::*;
-use clock;
+use mcg;
 use sim;
 
 #[derive(Copy, Clone, PartialEq)]
@@ -132,8 +132,8 @@ impl Uart {
         // Baud rate generation. Note that UART0 and UART1 are sourced from the core clock, not the
         // bus clock.
         let uart_clock = match self.index {
-            0 | 1 => clock::core_clock_hz(),
-            _ => clock::peripheral_clock_hz()
+            0 | 1 => mcg::core_clock_hz(),
+            _ => mcg::peripheral_clock_hz()
         };
 
         let baud_counter: u32 = (uart_clock >> 4) / baud_rate;

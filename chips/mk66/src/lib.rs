@@ -30,7 +30,6 @@ pub mod sim;
 pub mod mcg;
 pub mod osc;
 pub mod uart;
-pub mod clock;
 pub mod pit;
 pub mod spi;
 pub mod mpu;

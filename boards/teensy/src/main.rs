@@ -81,7 +81,7 @@ pub unsafe fn reset_handler() {
     mk66::init();
 
     // Configure the system clock.
-    mk66::clock::configure(120);
+    mk66::mcg::SCM.change_system_clock(mk66::mcg::SystemClockSource::PLL(120));
 
     // Enable the Port Control and Interrupt clocks.
     mk66::sim::enable_clock(mk66::sim::Clock::Clock5(mk66::sim::ClockGate5::PORTA));

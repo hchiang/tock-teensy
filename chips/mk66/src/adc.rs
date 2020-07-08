@@ -8,7 +8,7 @@
 //! - Author: Holly Chiang <hchiang1@stanford.edu>
 //! - Date: June 18, 2020
 
-use clock;
+use mcg;
 use core::cell::Cell;
 use core::cmp;
 use dma;
@@ -477,7 +477,7 @@ impl Adc {
     /// Setup the adc clock
     pub fn set_clock_divisor(&self, frequency: u32) -> ReturnCode {
         let regs: &AdcRegisters = &*self.registers;
-        let periph_freq = clock::peripheral_clock_hz();
+        let periph_freq = mcg::peripheral_clock_hz();
         // see pg. 988 of the datasheet for conversion time
         // (5 ADCK cycles + 5 bus clock cycles) + 1*(20 + 0 + 2 ADCK cycles)
         let clock_freq = frequency * 32;
