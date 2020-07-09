@@ -110,6 +110,9 @@ pub unsafe fn reset_handler() {
     //let spi = VirtualSpiComponent::new().finalize().unwrap();
     let rng = RngaComponent::new().finalize().unwrap();
 
+    let clock_manager = ClockManagerComponent::new(&mk66::clock_pm::TeensyCM)
+                                               .finalize().unwrap();
+
     let teensy = Teensy {
         xconsole: xconsole,
         adc: adc,
@@ -127,7 +130,7 @@ pub unsafe fn reset_handler() {
     if tests::TEST {
         tests::test();
     }
-    kernel::kernel_loop(&teensy, &mut chip, load_processes(), Some(&teensy.ipc));
+    kernel::kernel_loop(&teensy, &mut chip, load_processes(), Some(&teensy.ipc), clock_manager);
 }
 
 

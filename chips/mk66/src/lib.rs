@@ -20,8 +20,9 @@ extern crate block_cipher_trait;
 mod deferred_call_tasks;
 
 pub mod adc;
-pub mod flash;
 pub mod chip;
+pub mod clock_pm;
+pub mod flash;
 pub mod dma;
 pub mod nvic;
 pub mod wdog;
