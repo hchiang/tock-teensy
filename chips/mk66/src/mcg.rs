@@ -11,42 +11,6 @@ use regs::mcg::*;
 use self::Control1::CLKS::Value as OscSource;
 
 #[derive(Copy,Clone,PartialEq)]
-enum State {
-    Fei(Fei),
-    Fee(Fee),
-    Fbi(Fbi),
-    Fbe(Fbe),
-    Pbe(Pbe),
-    Pee(Pee),
-    Blpi(Blpi),
-    Blpe(Blpe),
-}
-
-#[derive(Copy,Clone,PartialEq)]
-struct Fei;
-
-#[derive(Copy,Clone,PartialEq)]
-struct Fee;
-
-#[derive(Copy,Clone,PartialEq)]
-struct Fbi;
-
-#[derive(Copy,Clone,PartialEq)]
-struct Fbe;
-
-#[derive(Copy,Clone,PartialEq)]
-struct Pbe;
-
-#[derive(Copy,Clone,PartialEq)]
-struct Pee;
-
-#[derive(Copy,Clone,PartialEq)]
-struct Blpi;
-
-#[derive(Copy,Clone,PartialEq)]
-struct Blpe;
-
-#[derive(Copy,Clone)]
 enum OscClock {
     Oscillator,
     RTC32K,
@@ -54,7 +18,7 @@ enum OscClock {
 }
 
 #[allow(dead_code)]
-#[derive(Copy,Clone)]
+#[derive(Copy,Clone,PartialEq)]
 enum OscRange {
     Low = 0,
     High = 1,
@@ -62,7 +26,7 @@ enum OscRange {
 }
 
 #[allow(non_camel_case_types, dead_code)]
-#[derive(Copy,Clone)]
+#[derive(Copy,Clone,PartialEq)]
 enum OscCapacitance {
     Load_0pF = 0b0000,
     Load_2pF = 0b1000,
@@ -83,7 +47,7 @@ enum OscCapacitance {
 }
 
 #[allow(non_camel_case_types, dead_code)]
-#[derive(Copy,Clone)]
+#[derive(Copy,Clone,PartialEq)]
 enum Frdiv {
     Low1_High32 = 0,
     Low2_High64 = 1,
@@ -97,13 +61,13 @@ enum Frdiv {
 
 //TODO FCRDIV can divide freq of internal reference clock
 // modify Ircs to pass in freq?
-#[derive(Copy,Clone)]
+#[derive(Copy,Clone,PartialEq)]
 enum Ircs {
     SlowInternal,
     FastInternal,
 }
 
-#[derive(Copy,Clone)]
+#[derive(Copy,Clone,PartialEq)]
 struct Xtal {
     clock: OscClock,
     range: OscRange,
@@ -135,112 +99,176 @@ const Teensy48MHz: Xtal = Xtal {
     load: OscCapacitance::Load_10pF
 };
 
+#[derive(Copy,Clone,PartialEq)]
+enum State {
+    Fei,
+    Fee(Xtal),
+    Fbi(Ircs),
+    Fbe(Xtal),
+    Pbe(Xtal),
+    Pee(Xtal),
+    Blpi(Ircs),
+    Blpe(Xtal),
+}
+
 trait ClockChange {
-    fn to_fei(self, freq: u32) -> State;
-    fn to_fee(self, freq: u32, xtal: Xtal) -> State;
+    fn to_fei(self) -> State;
+    fn to_fee(self, xtal: Xtal) -> State;
     fn to_fbi(self, ircs: Ircs) -> State;
     fn to_blpi(self, ircs: Ircs) -> State;
     fn to_fbe(self, xtal: Xtal) -> State;
-    fn to_pbe(self, freq: u32, xtal: Xtal) -> State;
+    fn to_pbe(self, xtal: Xtal) -> State;
     fn to_blpe(self, xtal: Xtal) -> State;
-    fn to_pee(self, freq: u32, xtal: Xtal) -> State;
+    fn to_pee(self, xtal: Xtal) -> State;
 }
 
 impl ClockChange for State {
-    fn to_fei(self, freq: u32) -> State {
+    fn to_fei(self) -> State {
         match self {
-            State::Fei(Fei) => Fei.to_fei(freq),
-            State::Fee(Fee) => Fee.to_fei(freq),
-            State::Fbi(Fbi) => Fbi.to_fei(freq),
-            State::Fbe(Fbe) => Fbe.to_fei(freq),
-            State::Pbe(Pbe) => Pbe.to_fei(freq),
-            State::Pee(Pee) => Pee.to_fei(freq),
-            State::Blpi(Blpi) => Blpi.to_fei(freq),
-            State::Blpe(Blpe) => Blpe.to_fei(freq),
+            State::Fei => State::Fei,
+            State::Fee(_xtal) => to_fei(),
+            State::Fbi(_ircs) => to_fei(),
+            State::Fbe(_xtal) => to_fei(),
+            State::Pbe(xtal) => to_fbe(xtal),
+            State::Pee(xtal) => to_pbe(xtal),
+            State::Blpi(ircs) => to_fbi(ircs),
+            State::Blpe(xtal) => to_fbe(xtal),
         }
     }
-    fn to_fee(self, freq: u32, xtal: Xtal) -> State {
+    fn to_fee(self, xtal: Xtal) -> State {
         match self {
-            State::Fei(Fei) => Fei.to_fee(freq, xtal),
-            State::Fee(Fee) => Fee.to_fee(freq, xtal),
-            State::Fbi(Fbi) => Fbi.to_fee(freq, xtal),
-            State::Fbe(Fbe) => Fbe.to_fee(freq, xtal),
-            State::Pbe(Pbe) => Pbe.to_fee(freq, xtal),
-            State::Pee(Pee) => Pee.to_fee(freq, xtal),
-            State::Blpi(Blpi) => Blpi.to_fee(freq, xtal),
-            State::Blpe(Blpe) => Blpe.to_fee(freq, xtal),
+            State::Fei => to_fee(xtal),
+// OSCSEL (IRC48M vs Oscillator vs RTC32K) cannot change while in use
+            State::Fee(old_xtal) => {
+                if old_xtal == xtal { self }
+                else { to_fei() }
+            }
+            State::Fbi(_ircs) => to_fee(xtal),
+            State::Fbe(old_xtal) => {
+                if old_xtal == xtal { to_fee(xtal) }
+                else { to_fei() }
+            }
+            State::Pbe(old_xtal) => to_fbe(old_xtal),
+            State::Pee(old_xtal) => to_pbe(old_xtal),
+            State::Blpi(ircs) => to_fbi(ircs),
+            State::Blpe(old_xtal) => to_fbe(old_xtal),
         }
     }
     fn to_fbi(self, ircs: Ircs) -> State {
         match self {
-            State::Fei(Fei) => Fei.to_fbi(ircs),
-            State::Fee(Fee) => Fee.to_fbi(ircs),
-            State::Fbi(Fbi) => Fbi.to_fbi(ircs),
-            State::Fbe(Fbe) => Fbe.to_fbi(ircs),
-            State::Pbe(Pbe) => Pbe.to_fbi(ircs),
-            State::Pee(Pee) => Pee.to_fbi(ircs),
-            State::Blpi(Blpi) => Blpi.to_fbi(ircs),
-            State::Blpe(Blpe) => Blpe.to_fbi(ircs),
+            State::Fei => to_fbi(ircs),
+            State::Fee(_xtal) => to_fbi(ircs),
+            State::Fbi(_ircs) => to_fbi(ircs),
+            State::Fbe(_xtal) => to_fbi(ircs),
+            State::Pbe(xtal) => to_fbe(xtal),
+            State::Pee(xtal) => to_pbe(xtal),
+            State::Blpi(_ircs) => to_fbi(ircs),
+            State::Blpe(xtal) => to_fbe(xtal),
         }
     }
     fn to_blpi(self, ircs: Ircs) -> State {
         match self {
-            State::Fei(Fei) => Fei.to_blpi(ircs),
-            State::Fee(Fee) => Fee.to_blpi(ircs),
-            State::Fbi(Fbi) => Fbi.to_blpi(ircs),
-            State::Fbe(Fbe) => Fbe.to_blpi(ircs),
-            State::Pbe(Pbe) => Pbe.to_blpi(ircs),
-            State::Pee(Pee) => Pee.to_blpi(ircs),
-            State::Blpi(Blpi) => Blpi.to_blpi(ircs),
-            State::Blpe(Blpe) => Blpe.to_blpi(ircs),
+            State::Fei => to_fbi(ircs),
+            State::Fee(_xtal) => to_fbi(ircs),
+            State::Fbi(_ircs) => to_blpi(ircs),
+            State::Fbe(_xtal) => to_fbi(ircs),
+            State::Pbe(xtal) => to_fbe(xtal),
+            State::Pee(xtal) => to_pbe(xtal),
+            State::Blpi(_ircs) => to_blpi(ircs),
+            State::Blpe(xtal) => to_fbe(xtal),
         }
     }
     fn to_fbe(self, xtal: Xtal) -> State {
         match self {
-            State::Fei(Fei) => Fei.to_fbe(xtal),
-            State::Fee(Fee) => Fee.to_fbe(xtal),
-            State::Fbi(Fbi) => Fbi.to_fbe(xtal),
-            State::Fbe(Fbe) => Fbe.to_fbe(xtal),
-            State::Pbe(Pbe) => Pbe.to_fbe(xtal),
-            State::Pee(Pee) => Pee.to_fbe(xtal),
-            State::Blpi(Blpi) => Blpi.to_fbe(xtal),
-            State::Blpe(Blpe) => Blpe.to_fbe(xtal),
+            State::Fei => to_fbe(xtal),
+            State::Fee(old_xtal) => {
+                if old_xtal == xtal { to_fbe(xtal) }
+                else { to_fbi(Ircs::FastInternal) }
+            }
+            State::Fbi(_ircs) => to_fbe(xtal),
+            State::Fbe(old_xtal) => {
+                if old_xtal == xtal { self }
+                else { to_fbi(Ircs::FastInternal) }
+            }
+            State::Pbe(old_xtal) => to_fbe(old_xtal),
+            State::Pee(old_xtal) => to_pbe(old_xtal),
+            State::Blpi(ircs) => to_fbi(ircs),
+            State::Blpe(old_xtal) => to_fbe(old_xtal),
         }
     }
-    fn to_pbe(self, freq: u32, xtal: Xtal) -> State {
+    fn to_pbe(self, xtal: Xtal) -> State {
         match self {
-            State::Fei(Fei) => Fei.to_pbe(freq, xtal),
-            State::Fee(Fee) => Fee.to_pbe(freq, xtal),
-            State::Fbi(Fbi) => Fbi.to_pbe(freq, xtal),
-            State::Fbe(Fbe) => Fbe.to_pbe(freq, xtal),
-            State::Pbe(Pbe) => Pbe.to_pbe(freq, xtal),
-            State::Pee(Pee) => Pee.to_pbe(freq, xtal),
-            State::Blpi(Blpi) => Blpi.to_pbe(freq, xtal),
-            State::Blpe(Blpe) => Blpe.to_pbe(freq, xtal),
+            State::Fei => to_fbe(xtal),
+            State::Fee(old_xtal) => {
+                if old_xtal == xtal { to_fbe(xtal) }
+                else { to_fbi(Ircs::FastInternal) }
+            }
+            State::Fbi(_ircs) => to_fbe(xtal),
+            State::Fbe(old_xtal) => {
+                if old_xtal == xtal { to_pbe(xtal) }
+                else { to_fbi(Ircs::FastInternal) }
+            }
+            State::Pbe(old_xtal) => {
+                if old_xtal == xtal { self }
+                else { to_fbe(old_xtal) }
+            }
+            State::Pee(old_xtal) => to_pbe(old_xtal),
+            State::Blpi(ircs) => to_fbi(ircs),
+            State::Blpe(old_xtal) => {
+                if old_xtal == xtal { to_pbe(xtal) }
+                else { to_fbe(old_xtal) }
+            }
         }
     }
     fn to_blpe(self, xtal: Xtal) -> State {
         match self {
-            State::Fei(Fei) => Fei.to_blpe(xtal),
-            State::Fee(Fee) => Fee.to_blpe(xtal),
-            State::Fbi(Fbi) => Fbi.to_blpe(xtal),
-            State::Fbe(Fbe) => Fbe.to_blpe(xtal),
-            State::Pbe(Pbe) => Pbe.to_blpe(xtal),
-            State::Pee(Pee) => Pee.to_blpe(xtal),
-            State::Blpi(Blpi) => Blpi.to_blpe(xtal),
-            State::Blpe(Blpe) => Blpe.to_blpe(xtal),
+            State::Fei => to_fbe(xtal),
+            State::Fee(old_xtal) => {
+                if old_xtal == xtal { to_fbe(xtal) }
+                else { to_fbi(Ircs::FastInternal) }
+            }
+            State::Fbi(_ircs) => to_fbe(xtal),
+            State::Fbe(old_xtal) => {
+                if old_xtal == xtal { to_blpe(xtal) }
+                else { to_fbi(Ircs::FastInternal) }
+            }
+            State::Pbe(old_xtal) => {
+                if old_xtal == xtal { to_blpe(xtal) }
+                else { to_fbe(old_xtal) }
+            }
+            State::Pee(old_xtal) => to_pbe(old_xtal),
+            State::Blpi(ircs) => to_fbi(ircs),
+            State::Blpe(old_xtal) => {
+                if old_xtal == xtal { self }
+                else { to_fbe(old_xtal) }
+            }
         }
     }
-    fn to_pee(self, freq: u32, xtal: Xtal) -> State {
+    fn to_pee(self, xtal: Xtal) -> State {
         match self {
-            State::Fei(Fei) => Fei.to_pee(freq, xtal),
-            State::Fee(Fee) => Fee.to_pee(freq, xtal),
-            State::Fbi(Fbi) => Fbi.to_pee(freq, xtal),
-            State::Fbe(Fbe) => Fbe.to_pee(freq, xtal),
-            State::Pbe(Pbe) => Pbe.to_pee(freq, xtal),
-            State::Pee(Pee) => Pee.to_pee(freq, xtal),
-            State::Blpi(Blpi) => Blpi.to_pee(freq, xtal),
-            State::Blpe(Blpe) => Blpe.to_pee(freq, xtal),
+            State::Fei => to_fbe(xtal),
+            State::Fee(old_xtal) => {
+                if old_xtal == xtal { to_fbe(xtal) }
+                else { to_fbi(Ircs::FastInternal) }
+            }
+            State::Fbi(_ircs) => to_fbe(xtal),
+            State::Fbe(old_xtal) => {
+                if old_xtal == xtal { to_pbe(xtal) }
+                else { to_fbi(Ircs::FastInternal) }
+            }
+            State::Pbe(old_xtal) => {
+                if old_xtal == xtal { to_pee(xtal) }
+                else { to_fbe(old_xtal) }
+            }
+            State::Pee(old_xtal) => {
+                if old_xtal == xtal { self }
+                else { to_pbe(old_xtal) }
+            }
+            State::Blpi(ircs) => to_fbi(ircs),
+            State::Blpe(old_xtal) => {
+                if old_xtal == xtal { to_pbe(xtal) }
+                else { to_fbe(old_xtal) }
+            }
         }
     }
 }
@@ -258,15 +286,26 @@ fn state() -> State {
     let plls = mcg.c6.is_set(Control6::PLLS);
     let lp = mcg.c2.is_set(Control2::LP);
 
+    let xtal: Xtal = match mcg.c7.read(Control7::OSCSEL) {
+        0 => Teensy16MHz,
+        1 => Teensy32KHz,
+        _ => Teensy48MHz,
+    };
+
+    let ircs: Ircs = match mcg.s.read(Status::IRCST) {
+        0 => Ircs::SlowInternal,
+        _ => Ircs::FastInternal,
+    };
+
     match (clks, irefs, plls, lp) {
-        (OscSource::LockedLoop, true, false, _) => State::Fei(Fei),
-        (OscSource::LockedLoop, false, false, _) => State::Fee(Fee),
-        (OscSource::Internal, true, false, false) => State::Fbi(Fbi),
-        (OscSource::External, false, false, false) => State::Fbe(Fbe),
-        (OscSource::LockedLoop, false, true, _) => State::Pee(Pee),
-        (OscSource::External, false, true, false) => State::Pbe(Pbe),
-        (OscSource::Internal, true, false, true) => State::Blpi(Blpi),
-        (OscSource::External, false, _, true) => State::Blpe(Blpe),
+        (OscSource::LockedLoop, true, false, _) => State::Fei,
+        (OscSource::LockedLoop, false, false, _) => State::Fee(xtal),
+        (OscSource::Internal, true, false, false) => State::Fbi(ircs),
+        (OscSource::External, false, false, false) => State::Fbe(xtal),
+        (OscSource::LockedLoop, false, true, _) => State::Pee(xtal),
+        (OscSource::External, false, true, false) => State::Pbe(xtal),
+        (OscSource::Internal, true, false, true) => State::Blpi(ircs),
+        (OscSource::External, false, _, true) => State::Blpe(xtal),
         _ => panic!("Not in a recognized power mode!")
     }
 }
@@ -320,10 +359,10 @@ fn set_fll_freq(freq: u32) {
     };
 
     match state() {
-        State::Fei(Fei) | State::Fbi(Fbi) => {
+        State::Fei | State::Fbi(..) => {
             mcg.c4.modify(Control4::DRST_DRS.val(drs_val as u8))
         }
-        State::Fee(Fee) | State::Fbe(Fbe) => {
+        State::Fee(..) | State::Fbe(..) => {
             mcg.c4.modify(Control4::DRST_DRS.val(drs_val as u8) +
                           Control4::DMX32::SET);
         }
@@ -331,431 +370,137 @@ fn set_fll_freq(freq: u32) {
     };
 }
 
-// Source: https://branan.github.io/teensy/2017/01/28/uart.html
-impl ClockChange for Fei {
-    fn to_fei(self, freq: u32) -> State {
-        set_fll_freq(freq);
-        State::Fei(Fei)
-    }
-    fn to_fbi(self, ircs: Ircs) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
+fn to_fei() -> State {
+    let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
 
-        mcg.c1.modify(Control1::CLKS::Internal);
+    mcg.c1.modify(Control1::CLKS::LockedLoop+
+                 Control1::IREFS::SlowInternal);
 
-        while !mcg.s.matches_all(Status::CLKST::Internal) {}
-
-        mcg.c2.modify(Control2::IRCS.val(ircs as u8));
-
-        mcg.sc.modify(StatusControl::FCRDIV.val(0 as u8));
-
-        State::Fbi(Fbi)
-    }
-    fn to_fee(self, freq: u32, xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
-
-        mcg.c2.modify(Control2::RANGE.val(xtal.range as u8) +
-                      Control2::EREFS::SET);
-
-        mcg.c7.modify(Control7::OSCSEL.val(xtal.clock as u8));
-
-        mcg.c1.modify(Control1::FRDIV.val(xtal.frdiv as u8) +
-                     Control1::IREFS::CLEAR);
-
-        set_fll_freq(freq);
-
-        while !mcg.s.matches_all(Status::OSCINIT0::SET +
-                             Status::IREFST::External) {} 
-
-        State::Fee(Fee)
-    }
-    fn to_blpi(self, ircs: Ircs) -> State { self.to_fbi(ircs) }
-    fn to_fbe(self, xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
-        mcg.c2.modify(Control2::RANGE.val(xtal.range as u8) +
-                      Control2::EREFS::SET);
-
-        mcg.c7.modify(Control7::OSCSEL.val(xtal.clock as u8));
-
-        mcg.c1.modify(Control1::CLKS::External +
-                     Control1::FRDIV.val(xtal.frdiv as u8) +
-                     Control1::IREFS::CLEAR);
-
-        while !mcg.s.matches_all(Status::OSCINIT0::SET +
-                             Status::IREFST::External +
-                             Status::CLKST::External) {}
-
-        State::Fbe(Fbe)
-    }
-    fn to_pbe(self, _freq: u32, xtal: Xtal) -> State { self.to_fbe(xtal) }
-    fn to_blpe(self, xtal: Xtal) -> State { self.to_fbe(xtal) }
-    fn to_pee(self, _freq: u32, xtal: Xtal) -> State { self.to_fbe(xtal) }
+    while !mcg.s.matches_all(Status::CLKST::Fll + Status::IREFST::Internal + 
+                             Status::IRCST::Slow) {}
+    
+    State::Fei
 }
 
-impl ClockChange for Fee {
-    fn to_fei(self, freq: u32) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
+fn to_fee(xtal: Xtal) -> State {
+    let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
 
-        mcg.c1.modify(Control1::IREFS::SET);
-        set_fll_freq(freq);
+    mcg.c2.modify(Control2::RANGE.val(xtal.range as u8));
 
-        while !mcg.s.matches_all(Status::IRCST::Slow +
-                             Status::IREFST::Internal) {} 
-    
-        State::Fei(Fei)
-    }
-    fn to_fee(self, freq: u32, xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
-        mcg.c2.modify(Control2::RANGE.val(xtal.range as u8) +
-                      Control2::EREFS::SET);
-
-        mcg.c7.modify(Control7::OSCSEL.val(xtal.clock as u8));
-
-        mcg.c1.modify(Control1::FRDIV.val(xtal.frdiv as u8) +
-                     Control1::IREFS::CLEAR);
-
-        set_fll_freq(freq);
-
-        while !mcg.s.matches_all(Status::OSCINIT0::SET +
-                             Status::IREFST::External) {} 
-        State::Fee(Fee)
-
-    }
-    fn to_fbi(self, ircs: Ircs) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-        
-        mcg.c2.modify(Control2::IRCS.val(ircs as u8));
-
-        mcg.c1.modify(Control1::CLKS::Internal + Control1::IREFS::SlowInternal);
-
-        while !mcg.s.matches_all(Status::IRCST.val(ircs as u8) + Status::IREFST::Internal + Status::CLKST::Internal) {}
-
-        mcg.sc.modify(StatusControl::FCRDIV.val(0 as u8));
-    
-        State::Fbi(Fbi)
-    }
-    fn to_blpi(self, ircs: Ircs) -> State { self.to_fbi(ircs) }
-    fn to_fbe(self, xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
-        mcg.c7.modify(Control7::OSCSEL.val(xtal.clock as u8));
-
-        mcg.c1.modify(Control1::CLKS::External);
-
-        while !mcg.s.matches_all(Status::CLKST::External) {}
-
-        State::Fbe(Fbe)
-    }
-    fn to_pbe(self, _freq: u32, xtal: Xtal) -> State { self.to_fbe(xtal) }
-    fn to_blpe(self, xtal: Xtal) -> State { self.to_fbe(xtal) }
-    fn to_pee(self, _freq: u32, xtal: Xtal) -> State { self.to_fbe(xtal) }
-}
-
-impl ClockChange for Fbi {
-    fn to_fei(self, freq: u32) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
-        mcg.c1.modify(Control1::CLKS::LockedLoop);
-
-        set_fll_freq(freq);
-
-        while !mcg.s.matches_all(Status::CLKST::Fll + 
-                                 Status::IRCST::Slow) {} 
-
-        State::Fei(Fei)
-    }
-    fn to_fee(self, freq: u32, xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
-        mcg.c2.modify(Control2::RANGE.val(xtal.range as u8) +
-                      Control2::EREFS::SET);
-
-        mcg.c7.modify(Control7::OSCSEL.val(xtal.clock as u8));
-
-        mcg.c1.modify(Control1::CLKS::LockedLoop +
-                     Control1::FRDIV.val(xtal.frdiv as u8) +
-                     Control1::IREFS::External);
-
-        set_fll_freq(freq);
-
-        while !mcg.s.matches_all(Status::OSCINIT0::SET +
-                                 Status::CLKST::Fll + 
-                                 Status::IREFST::External) {} 
-
-        State::Fee(Fee)
-    }
-    fn to_fbi(self, ircs: Ircs) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
-        mcg.c2.modify(Control2::IRCS.val(ircs as u8));
-
-        State::Fbi(Fbi)
-    }
-    fn to_blpi(self, ircs: Ircs) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-    
-        mcg.c2.modify(Control2::IRCS.val(ircs as u8) + Control2::LP::SET);
-
-        State::Blpi(Blpi)
-    }
-    fn to_fbe(self, xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
-        mcg.c2.modify(Control2::RANGE.val(xtal.range as u8) +
-                      Control2::EREFS::SET);
-
-        mcg.c7.modify(Control7::OSCSEL.val(xtal.clock as u8));
-
-        mcg.c1.modify(Control1::CLKS::External +
-                     Control1::FRDIV.val(xtal.frdiv as u8) +
-                     Control1::IREFS::External);
-
-        while !mcg.s.matches_all(Status::OSCINIT0::SET +
-                                 Status::CLKST::External + 
-                                 Status::IREFST::External) {} 
-
-        State::Fbe(Fbe)
-    }
-    fn to_pbe(self, _freq: u32, xtal: Xtal) -> State { self.to_fbe(xtal) }
-    fn to_blpe(self, xtal: Xtal) -> State { self.to_fbe(xtal) }
-    fn to_pee(self, _freq: u32, xtal: Xtal) -> State { self.to_fbe(xtal) }
-}
-
-impl ClockChange for Fbe {
-    fn to_fei(self, freq: u32) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
-        mcg.c1.modify(Control1::CLKS::LockedLoop+
-                     Control1::IREFS::SlowInternal);
-
-        set_fll_freq(freq);
-
-        while !mcg.s.matches_all(Status::IREFST::Internal + Status::CLKST::Fll + 
-                                 Status::IRCST::Slow) {}
-
-        State::Fei(Fei)
-    }
-    fn to_fee(self, freq: u32, xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
-        mcg.c1.modify(Control1::CLKS::LockedLoop);
-
-        while !mcg.s.matches_all(Status::CLKST::Fll) {}
-
-        mcg.c2.modify(Control2::RANGE.val(xtal.range as u8) +
-                      Control2::EREFS::SET);
-
-        mcg.c7.modify(Control7::OSCSEL.val(xtal.clock as u8));
-
-        mcg.c1.modify(Control1::FRDIV.val(xtal.frdiv as u8) +
-                     Control1::IREFS::CLEAR);
-
-        set_fll_freq(freq);
-
-        State::Fee(Fee)
-    }
-    fn to_fbi(self, ircs: Ircs) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-        
-        mcg.c1.modify(Control1::CLKS::Internal +
-                      Control1::IREFS::SlowInternal);
-
-        while !mcg.s.matches_all(Status::IREFST::Internal + Status::CLKST::Internal) {}
-
-        mcg.c2.modify(Control2::IRCS.val(ircs as u8));
-
-        mcg.sc.modify(StatusControl::FCRDIV.val(0 as u8));
-
-        State::Fbi(Fbi)
-    }
-    fn to_blpi(self, ircs: Ircs) -> State { self.to_fbi(ircs) }
-    fn to_fbe(self, xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
-        if mcg.c7.read(Control7::OSCSEL) !=  xtal.clock as u8 {
-            self.to_fbi(Ircs::FastInternal)
-        } else {
-            State::Fbe(Fbe)
+    match state() {
+        State::Fei | State::Fbi(..)  => {
+            if xtal == Teensy16MHz {
+                mcg.c2.modify(Control2::EREFS::SET);
+                while !mcg.s.matches_all(Status::OSCINIT0::SET) {}
+            }
+            mcg.c7.modify(Control7::OSCSEL.val(xtal.clock as u8));
         }
+        _ => {}
     }
-    fn to_pbe(self, freq: u32, xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
 
-        if mcg.c7.read(Control7::OSCSEL) !=  xtal.clock as u8 {
-            self.to_fbi(Ircs::FastInternal)
-        } else {
-            set_pll_freq(freq);
+    mcg.c1.modify(Control1::CLKS::LockedLoop +
+                 Control1::FRDIV.val(xtal.frdiv as u8) +
+                 Control1::IREFS::External);
 
+    while !mcg.s.matches_all(Status::CLKST::Fll + 
+                             Status::IREFST::External) {} 
+
+    State::Fee(xtal)
+}
+
+fn to_fbi(ircs: Ircs) -> State {
+    let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
+
+    mcg.sc.modify(StatusControl::FCRDIV.val(0 as u8));
+
+    mcg.c2.modify(Control2::LP::CLEAR + Control2::IRCS.val(ircs as u8));
+
+    mcg.c1.modify(Control1::CLKS::Internal + Control1::IREFS::SlowInternal);
+
+    while !mcg.s.matches_all(Status::CLKST::Internal +
+                             Status::IREFST::Internal +
+                             Status::IRCST.val(ircs as u8)) {} 
+
+    State::Fbi(ircs)
+}
+
+fn to_blpi(ircs: Ircs) -> State { 
+    let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
+    
+    mcg.c2.modify(Control2::IRCS.val(ircs as u8) + Control2::LP::SET);
+
+    while !mcg.s.matches_all(Status::IRCST.val(ircs as u8)) {} 
+
+    State::Blpi(ircs)
+}
+
+fn to_fbe(xtal: Xtal) -> State {
+    let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
+
+    mcg.c2.modify(Control2::LP::CLEAR +
+                  Control2::RANGE.val(xtal.range as u8));
+
+    match state() {
+        State::Fei | State::Fbi(..)  => {
+            if xtal == Teensy16MHz {
+                mcg.c2.modify(Control2::EREFS::SET);
+                while !mcg.s.matches_all(Status::OSCINIT0::SET) {}
+            }
+            mcg.c7.modify(Control7::OSCSEL.val(xtal.clock as u8));
+        }
+        _ => {}
+    }
+
+    mcg.c6.modify(Control6::PLLS::Fll);
+
+    mcg.c1.modify(Control1::CLKS::External +
+                 Control1::FRDIV.val(xtal.frdiv as u8) +
+                 Control1::IREFS::External);
+
+    while !mcg.s.matches_all(Status::PLLST::Fll +
+                             Status::CLKST::External +
+                             Status::IREFST::External) {} 
+
+    State::Fbe(xtal)
+}
+
+fn to_pbe(xtal: Xtal) -> State { 
+    let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
+
+    match state() {
+        State::Pee(..) => {
+            mcg.c1.modify(Control1::CLKS::External);
+
+            while !mcg.s.matches_all(Status::CLKST::External) {}
+        } 
+        _ => {
             mcg.c6.modify(Control6::PLLS::SET);
 
-            // Wait for PLL to be selected and stable PLL lock
-            while !mcg.s.matches_all(Status::PLLST::PllcsOutput + Status::LOCK0::SET) {}
-
-            State::Pbe(Pbe)
+            mcg.c2.modify(Control2::LP::CLEAR);
         }
     }
-    fn to_blpe(self, xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
 
-        if mcg.c7.read(Control7::OSCSEL) !=  xtal.clock as u8 {
-            self.to_fbi(Ircs::FastInternal)
-        } else {
-            mcg.c2.modify(Control2::LP::SET);
-            State::Blpe(Blpe)
-        }
-    }
-    fn to_pee(self, freq: u32, xtal: Xtal) -> State { 
-        self.to_pbe(freq, xtal) 
-    }
+    while !mcg.s.matches_all(Status::PLLST::PllcsOutput + Status::LOCK0::SET) {}
+
+    State::Pbe(xtal)
 }
 
-impl ClockChange for Pbe {
-    fn to_fei(self, _freq: u32) -> State { self.to_fbe(Teensy32KHz) }
-    fn to_fee(self, _freq: u32, xtal: Xtal) -> State { self.to_fbe(xtal) }
-    fn to_fbi(self, _ircs: Ircs) -> State { self.to_fbe(Teensy32KHz) }
-    fn to_blpi(self, _ircs: Ircs) -> State { self.to_fbe(Teensy32KHz) }
-    fn to_fbe(self, _xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
+fn to_blpe(xtal: Xtal) -> State { 
+    let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
 
-        mcg.c6.modify(Control6::PLLS::CLEAR);
+    mcg.c2.modify(Control2::LP::SET);
 
-        while !mcg.s.matches_all(Status::PLLST::Fll ) {}
-        
-        State::Fbe(Fbe) 
-    }
-    fn to_pbe(self, _freq: u32, xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-        
-        if mcg.c7.read(Control7::OSCSEL) !=  xtal.clock as u8 {
-            //TODO if freq is different
-            self.to_fbe(xtal) 
-        } else { 
-            State::Pbe(Pbe)
-        }
-    }
-    fn to_blpe(self, xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-        
-        if mcg.c7.read(Control7::OSCSEL) !=  xtal.clock as u8 {
-            self.to_fbe(xtal) 
-        } else {
-            mcg.c2.modify(Control2::LP::SET);
-
-            State::Blpe(Blpe)
-        }
-    }
-    fn to_pee(self, _freq: u32, xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
-        if mcg.c7.read(Control7::OSCSEL) !=  xtal.clock as u8 {
-            self.to_fbe(xtal) 
-            //TODO handle case where freq is different
-        } else {
-            mcg.c1.modify(Control1::CLKS::LockedLoop);
-
-            while !mcg.s.matches_all(Status::CLKST::Pll) {}
-
-            State::Pee(Pee)
-        }
-    }
+    State::Blpe(xtal)
 }
 
-impl ClockChange for Pee {
-    fn to_fei(self, freq: u32) -> State { self.to_pbe(freq, Teensy32KHz) } 
-    fn to_fee(self, freq: u32, xtal: Xtal) -> State {self.to_pbe(freq, xtal) }
-    fn to_fbi(self, _ircs: Ircs) -> State { self.to_pbe(0, Teensy32KHz) }
-    fn to_blpi(self, _ircs: Ircs) -> State { self.to_pbe(0, Teensy32KHz) }
-    fn to_fbe(self, xtal: Xtal) -> State { self.to_pbe(0, xtal) }
-    fn to_pbe(self, _freq: u32, xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
+fn to_pee(xtal: Xtal) -> State { 
+    let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
 
-        mcg.c7.modify(Control7::OSCSEL.val(xtal.clock as u8));
+    mcg.c1.modify(Control1::CLKS::LockedLoop);
 
-        mcg.c1.modify(Control1::CLKS::External);
+    while !mcg.s.matches_all(Status::CLKST::Pll) {}
 
-        while !mcg.s.matches_all(Status::CLKST::External) {}
-
-        State::Pbe(Pbe)
-    }
-    fn to_blpe(self, xtal: Xtal) -> State { self.to_pbe(0, xtal) }
-    fn to_pee(self, _freq: u32, xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
-        if mcg.c7.read(Control7::OSCSEL) !=  xtal.clock as u8 {
-            self.to_fbe(xtal) 
-            //TODO handle case where freq is different
-        } else {
-            State::Pee(Pee)
-        }
-    }
-}
-
-impl ClockChange for Blpi {
-    fn to_fei(self, _freq: u32) -> State { self.to_fbi(Ircs::SlowInternal) }
-    fn to_fee(self, _freq: u32, _xtal: Xtal) -> State { self.to_fbi(Ircs::FastInternal) }
-    fn to_fbi(self, ircs: Ircs) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
-        mcg.c2.modify(Control2::IRCS.val(ircs as u8) + Control2::LP::CLEAR);
-
-        while !mcg.s.matches_all(Status::IREFST::Internal) {}
-
-        State::Fbi(Fbi)
-    }
-    fn to_blpi(self, ircs: Ircs) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
-        mcg.c2.modify(Control2::IRCS.val(ircs as u8));
-
-        State::Blpi(Blpi)
-    }
-    fn to_fbe(self, _xtal: Xtal) -> State { self.to_fbi(Ircs::FastInternal) }
-    fn to_pbe(self, _freq: u32, _xtal: Xtal) -> State { self.to_fbi(Ircs::FastInternal) }
-    fn to_blpe(self, _xtal: Xtal) -> State { self.to_fbi(Ircs::FastInternal) }
-    fn to_pee(self, _freq: u32, _xtal: Xtal) -> State { self.to_fbi(Ircs::FastInternal) }
-}
-
-impl ClockChange for Blpe {
-    fn to_fei(self, _freq: u32) -> State { self.to_fbe(Teensy32KHz) }
-    fn to_fee(self, _freq: u32, xtal: Xtal) -> State { self.to_fbe(xtal) }
-    fn to_fbi(self, _ircs: Ircs) -> State { self.to_fbe(Teensy32KHz) }
-    fn to_blpi(self, _ircs: Ircs) -> State { self.to_fbe(Teensy32KHz) }
-    fn to_fbe(self, _xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-        
-        mcg.c6.modify(Control6::PLLS::CLEAR);
-
-        mcg.c2.modify(Control2::LP::CLEAR);
-
-        while !mcg.s.matches_all(Status::PLLST::Fll) {}
-        
-        State::Fbe(Fbe)
-    }
-    fn to_pbe(self, freq: u32, _xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
-        set_pll_freq(freq);
-
-        mcg.c6.modify(Control6::PLLS::SET);
-
-        mcg.c2.modify(Control2::LP::CLEAR);
-
-        while !mcg.s.matches_all(Status::PLLST::PllcsOutput + Status::LOCK0::SET) {}
-
-        State::Pbe(Pbe)
-    }
-    fn to_blpe(self, xtal: Xtal) -> State {
-        let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
-        if mcg.c7.read(Control7::OSCSEL) !=  xtal.clock as u8 {
-            self.to_fbe(xtal) 
-        } else {
-            State::Blpe(Blpe)
-        }
-    }
-    fn to_pee(self, freq: u32, xtal: Xtal) -> State { self.to_pbe(freq, xtal) }
+    State::Pee(xtal)
 }
 
 #[derive(Copy,Clone,PartialEq)]
@@ -805,13 +550,17 @@ impl SystemClockManager {
         sim::set_dividers(1, bus_div, flash_div);
     
         unsafe {
-            CORECLK = core_freq * MHz;
-            BUSCLK = (core_freq * MHz) / bus_div; 
-            FLASHCLK = (core_freq * MHz) / flash_div;
+            CORECLK = core_freq ;
+            BUSCLK = core_freq  / bus_div; 
+            FLASHCLK = core_freq  / flash_div;
         }
     }
 
     pub unsafe fn change_system_clock(&self, clock_source: SystemClockSource) {
+        if clock_source == self.clock_source.get() {
+            return;
+        }
+
         let mut set_divisors: bool = false;
         let new_clock_freq = get_clock_frequency(clock_source);
         if new_clock_freq > CORECLK {
@@ -823,38 +572,41 @@ impl SystemClockManager {
         match clock_source {
             SystemClockSource::Oscillator => {
                 osc::enable(Teensy16MHz.load as u8);
-                while clock_state != State::Blpe(Blpe) {
+                while clock_state != State::Blpe(Teensy16MHz) {
                     clock_state = clock_state.to_blpe(Teensy16MHz);
                 }
             }
             SystemClockSource::RTC32K => {
-                while clock_state != State::Blpe(Blpe) {
+                while clock_state != State::Blpe(Teensy32KHz) {
                     clock_state = clock_state.to_blpe(Teensy32KHz);
                 }
             }
             SystemClockSource::IRC48M => {
-                while clock_state != State::Blpe(Blpe) {
+                while clock_state != State::Blpe(Teensy48MHz) {
                     clock_state = clock_state.to_blpe(Teensy48MHz);
                 }
             }
             SystemClockSource::SlowInternal => {
-                while clock_state != State::Blpi(Blpi) {
+                while clock_state != State::Blpi(Ircs::SlowInternal) {
                     clock_state = clock_state.to_blpi(Ircs::SlowInternal);
                 }
             }
             SystemClockSource::FastInternal => {
-                while clock_state != State::Blpi(Blpi) {
+                while clock_state != State::Blpi(Ircs::FastInternal) {
                     clock_state = clock_state.to_blpi(Ircs::FastInternal);
                 }
             }
             SystemClockSource::FLL(freq) => {
-                while clock_state != State::Fei(Fei) {
-                    clock_state = clock_state.to_fei(freq);
+                set_fll_freq(freq);
+                while clock_state != State::Fei {
+                    clock_state = clock_state.to_fei();
                 }
             }
             SystemClockSource::PLL(freq) => {
-                while clock_state != State::Pee(Pee) {
-                    clock_state = clock_state.to_pee(freq, Teensy32KHz);
+                osc::enable(Teensy16MHz.load as u8);
+                set_pll_freq(freq);
+                while clock_state != State::Pee(Teensy16MHz) {
+                    clock_state = clock_state.to_pee(Teensy16MHz);
                 }
             }
         }
@@ -863,8 +615,9 @@ impl SystemClockManager {
             self.configure_div(new_clock_freq);
         }
 
-        if self.clock_source.get() == SystemClockSource::Oscillator {
-            osc::disable();
+        match clock_source {
+            SystemClockSource::Oscillator | SystemClockSource::PLL(..) => {}
+            _ => { osc::disable(); }
         }
         self.clock_source.set(clock_source);
     }

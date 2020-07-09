@@ -50,7 +50,7 @@ impl PeripheralManagement<sim::Clock> for Spi {
 
     fn after_peripheral_access(&self, clock: &sim::Clock, registers: &Registers) {
         if !self.running.get() {
-            clock.disable();
+            //clock.disable();
         }
     }
 }

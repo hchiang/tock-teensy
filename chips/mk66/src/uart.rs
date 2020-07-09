@@ -25,7 +25,8 @@ pub struct Uart {
     rx_buffer: TakeCell<'static, [u8]>,
     rx_len: Cell<usize>,
     rx_index: Cell<usize>,
-    state: Cell<UartState>
+    state: Cell<UartState>,
+    baud_rate: Cell<u32>,
 }
 
 pub static mut UART0: Uart = Uart::new(0);
@@ -45,6 +46,7 @@ impl Uart {
             rx_len: Cell::new(0),
             rx_index: Cell::new(0),
             state: Cell::new(UartState::Idle),
+            baud_rate: Cell::new(0),
         }
     }
 
@@ -126,7 +128,7 @@ impl Uart {
         regs.bdh.modify(stop_bits);
     }
 
-    fn set_baud_rate(&self, baud_rate: u32) {
+    fn set_baud_rate(&self) {
         let regs: &mut Registers = unsafe { mem::transmute(self.registers) };
 
         // Baud rate generation. Note that UART0 and UART1 are sourced from the core clock, not the
@@ -136,7 +138,7 @@ impl Uart {
             _ => mcg::peripheral_clock_hz()
         };
 
-        let baud_counter: u32 = (uart_clock >> 4) / baud_rate;
+        let baud_counter: u32 = (uart_clock >> 4) / self.baud_rate.get();
 
         // Set the baud rate.
         regs.c4.modify(Control4::BRFA.val(0));
@@ -233,7 +235,7 @@ impl hil::uart::UART for Uart {
 
         self.set_parity(params.parity);
         self.set_stop_bits(params.stop_bits);
-        self.set_baud_rate(params.baud_rate);
+        self.baud_rate.set(params.baud_rate);
 
         self.disable_clock();
     }
@@ -241,6 +243,7 @@ impl hil::uart::UART for Uart {
     fn transmit(&self, tx_data: &'static mut [u8], tx_len: usize) {
         self.state.set(UartState::Transmitting);
         self.enable_clock();
+        self.set_baud_rate();
         self.enable_tx();
         self.enable_tx_interrupts();
 
@@ -255,6 +258,7 @@ impl hil::uart::UART for Uart {
     fn receive(&self, rx_buffer: &'static mut [u8], rx_len: usize) {
         self.state.set(UartState::Receiving);
         self.enable_clock();
+        self.set_baud_rate();
         self.enable_rx();
         self.enable_rx_interrupts();
 
