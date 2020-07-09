@@ -7,11 +7,12 @@
 use core::cell::Cell;
 use core::ops::{Index, IndexMut};
 use deferred_call_tasks::Task;
-use kernel::common::cells::TakeCell;
+use kernel::common::cells::{TakeCell, OptionalCell};
 use kernel::common::deferred_call::DeferredCall;
 use kernel::common::regs::{ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::hil;
+use kernel::hil::clock_pm::{ClockClient, ClockManager, ClientIndex};
 use kernel::ReturnCode;
 use sim;
 
@@ -238,6 +239,9 @@ pub struct FTFE {
     client: Cell<Option<&'static hil::flash::Client<FTFE>>>,
     current_state: Cell<FlashState>,
     buffer: TakeCell<'static, K66Sector>,
+
+    clock_manager: OptionalCell<&'static ClockManager>,
+    client_index: OptionalCell<&'static ClientIndex>,
 }
 
 const FMC_REGISTER_ADDRESS: StaticRef<FMCRegisters> =
@@ -259,6 +263,8 @@ impl FTFE {
             client: Cell::new(None),
             current_state: Cell::new(FlashState::Unconfigured),
             buffer: TakeCell::empty(),
+            clock_manager: OptionalCell::empty(),
+            client_index: OptionalCell::empty(),
         }
     }
     pub fn handle_interrupt(&self) {
@@ -296,6 +302,12 @@ impl FTFE {
             FlashState::Read => {
                 self.current_state.set(FlashState::Ready);
 
+                self.client_index.map( |client_index|
+                    self.clock_manager.map( |clock_manager|
+                        clock_manager.disable_clock(client_index)
+                    )
+                );
+
                 self.client.get().map(|client| {
                     self.buffer.take().map(|buffer| {
                         client.read_complete(buffer, hil::flash::Error::CommandComplete);
@@ -305,7 +317,16 @@ impl FTFE {
             FlashState::WriteSetRam { addr } => {
                 self.current_state.set(FlashState::WriteErasing{ addr: addr });
                 self.issue_command(FlashCMD::EraseFlashSector, addr);
+
+//TODO add another flash state for this?
+                self.client_index.map( |client_index|
+                    self.clock_manager.map( |clock_manager| {
+                        clock_manager.set_min_frequency(client_index, 1000000);
+                        clock_manager.enable_clock(client_index)
+                    })
+                );
             }
+//TODO disable for write_to_program_buffer?
             FlashState::WriteErasing { addr } => {
                 self.current_state.set(
                     FlashState::WriteWriting{ addr: addr, offset: PROGRAM_BUFFER_SIZE });
@@ -323,6 +344,12 @@ impl FTFE {
                     //fmc_regs.pfb23cr.modify(FlashBank23Control::B1DCE::CLEAR + 
                     //                        FlashBank23Control::B1DPE::CLEAR); 
 
+                    self.client_index.map( |client_index|
+                        self.clock_manager.map( |clock_manager|
+                            clock_manager.disable_clock(client_index)
+                        )
+                    );
+
                     self.client.get().map(|client| {
                         self.buffer.take().map(|buffer| {
                             client.write_complete(buffer, hil::flash::Error::CommandComplete);
@@ -338,6 +365,12 @@ impl FTFE {
             }
             FlashState::EraseErasing => {
                 self.current_state.set(FlashState::Ready);
+
+                self.client_index.map( |client_index|
+                    self.clock_manager.map( |clock_manager|
+                        clock_manager.disable_clock(client_index) 
+                    )
+                );
 
                 self.client.get().map(|client| {
                     client.erase_complete(hil::flash::Error::CommandComplete);
@@ -449,6 +482,13 @@ impl FTFE {
             return ReturnCode::EINVAL;
         }
 
+        self.client_index.map( |client_index|
+            self.clock_manager.map( |clock_manager| {
+                clock_manager.set_min_frequency(client_index, 40000000);
+                clock_manager.enable_clock(client_index);
+            })
+        );
+
         // Actually do a copy from flash into the buffer.
         let mut byte: *const u8 = address as *const u8;
         unsafe {
@@ -499,7 +539,17 @@ impl FTFE {
         }
 
         self.current_state.set(FlashState::EraseErasing);
+
+//TODO add EraseClock state for this?
         self.issue_command(FlashCMD::EraseFlashSector, addr);
+
+        self.client_index.map( |client_index|
+            self.clock_manager.map( |clock_manager| {
+                clock_manager.set_min_frequency(client_index, 1000000);
+                clock_manager.enable_clock(client_index)
+            })
+        );
+
         ReturnCode::SUCCESS
     }
 }
@@ -525,3 +575,20 @@ impl hil::flash::Flash for FTFE {
         self.erase_page(page_number * SECTOR_SIZE)
     }
 }
+
+impl ClockClient for FTFE {
+    fn setup_client(&self, clock_manager: &'static ClockManager, client_index: &'static ClientIndex) {
+        self.clock_manager.set(clock_manager);
+        self.client_index.set(client_index);
+        clock_manager.set_need_lock(client_index, false);
+    }
+    fn configure_clock(&self, _frequency: u32) {}
+    fn clock_enabled(&self) {
+        match self.current_state.get() {
+            FlashState::WriteErasing{..} | FlashState::EraseErasing => self.handle_interrupt(),
+            _ => {}
+        }
+    }
+    fn clock_disabled(&self) {}
+}
+

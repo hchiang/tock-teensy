@@ -114,6 +114,7 @@ pub unsafe fn reset_handler() {
     let clock_manager = ClockManagerComponent::new(&mk66::clock_pm::TeensyCM)
                                                .finalize().unwrap();
     clock_manager.register(&mk66::adc::ADC0);
+    clock_manager.register(&mk66::flash::FLASH_CONTROLLER);
 
     let teensy = Teensy {
         xconsole: xconsole,
