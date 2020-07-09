@@ -36,14 +36,14 @@ int main(void) {
   ret = nonvolatile_storage_internal_write_done_subscribe(write_done, NULL);
   if (ret != 0) printf("ERROR setting write done callback\n");
 
-  printf("Begin\n");
+  //printf("Begin\n");
   while(true) {
     int err = adc_sample_buffer_sync(channel, freq, adc_buffer, adc_length);
     if (err < 0) {
         printf("Error sampling ADC: %d\n", err);
     }
 
-    int k, i;
+    int i, k;
     for (k=0; k<adc_length/16; k++) {
       for (i=k*16; i<(k+1)*16; i++) {
         fft_buf[i % 16] = adc_buffer[i]; // Copy needed bc fft alg I found is int not uint16
@@ -59,14 +59,14 @@ int main(void) {
     memcpy(writebuf, (void*)&avg_fft_mag[0], flash_len);
 
     wdone = false;
-    ret  = nonvolatile_storage_internal_write(0, flash_len);
+    ret  = nonvolatile_storage_internal_write(0, 2000);
     if (ret != 0) {
       printf("\tERROR calling write\n");
       return ret;
     }
     yield_for(&wdone);
 
-    printf("Done\n");
+    //printf("Done\n");
 
     delay_ms(500);
   }

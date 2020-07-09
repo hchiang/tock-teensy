@@ -355,7 +355,7 @@ fn set_fll_freq(freq: u32) {
         24 => 0,
         48 => 1,
         72 => 2,
-        96 => 4,
+        96 => 3,
         _ => panic!("Invalid fll frequency selected!")
     };
 
@@ -519,7 +519,7 @@ pub struct SystemClockManager {
     clock_source: Cell<SystemClockSource>,
 }
 
-pub static mut SCM: SystemClockManager = SystemClockManager::new(SystemClockSource::FLL(24));
+pub static mut SCM: SystemClockManager = SystemClockManager::new(SystemClockSource::FLL(20));
 
 // On reset, MCGOUTCLK is sourced from the 32kHz internal reference clock 
 // multiplied by the FLL, which has a default multiplier of 640.
