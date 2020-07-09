@@ -1,6 +1,7 @@
 //! Implementation of the Multipurpose Clock Generator
 //!
 
+use cortexm4;
 use ::core::mem;
 use core::cell::Cell;
 use osc;
@@ -520,9 +521,6 @@ pub struct SystemClockManager {
 
 pub static mut SCM: SystemClockManager = SystemClockManager::new(SystemClockSource::FLL(24));
 
-#[allow(non_upper_case_globals)]
-const MHz: u32 = 1_000_000;
-
 // On reset, MCGOUTCLK is sourced from the 32kHz internal reference clock 
 // multiplied by the FLL, which has a default multiplier of 640.
 static mut CORECLK: u32 = 20_480_000;
@@ -537,6 +535,10 @@ impl SystemClockManager {
     }
 
     fn configure_div(&self, core_freq: u32) {
+        unsafe {
+            cortexm4::systick::SysTick::set_hertz(core_freq);
+        }
+
         let mut bus_div = 1;
         while core_freq / bus_div > 60_000_000 {
             bus_div += 1;

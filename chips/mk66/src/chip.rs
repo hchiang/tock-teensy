@@ -13,12 +13,13 @@ use smc;
 use deferred_call_tasks::Task;
 use nvic;
 
+use cortexm4;
 use kernel::common::deferred_call;
 use kernel::Chip;
 
 pub struct MK66 {
     pub mpu: mpu::Mpu,
-    pub systick: (),
+    pub systick: cortexm4::systick::SysTick,
 }
 
 impl MK66 {
@@ -34,14 +35,14 @@ impl MK66 {
 
         MK66 {
             mpu: mpu::Mpu::new(),
-            systick: ()
+            systick: cortexm4::systick::SysTick::new(),
         }
     }
 }
 
 impl Chip for MK66 {
     type MPU = mpu::Mpu;
-    type SysTick = ();
+    type SysTick = cortexm4::systick::SysTick;
 
     fn service_pending_interrupts(&mut self) {
         use nvic::*;
