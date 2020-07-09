@@ -13,7 +13,6 @@ use smc;
 use deferred_call_tasks::Task;
 use nvic;
 
-use cortexm4;
 use kernel::common::deferred_call;
 use kernel::Chip;
 
