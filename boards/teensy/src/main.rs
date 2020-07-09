@@ -6,6 +6,7 @@ extern crate capsules;
 
 #[macro_use(debug, debug_gpio, static_init, register_bitfields, register_bitmasks)]
 extern crate kernel;
+use kernel::hil::clock_pm::ClockManager;
 
 #[allow(dead_code)]
 extern crate mk66;
@@ -112,6 +113,7 @@ pub unsafe fn reset_handler() {
 
     let clock_manager = ClockManagerComponent::new(&mk66::clock_pm::TeensyCM)
                                                .finalize().unwrap();
+    clock_manager.register(&mk66::adc::ADC0);
 
     let teensy = Teensy {
         xconsole: xconsole,

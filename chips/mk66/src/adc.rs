@@ -19,6 +19,7 @@ use kernel::common::regs::{ReadOnly, ReadWrite};
 use kernel::common::StaticRef;
 use kernel::hil;
 use kernel::ReturnCode;
+use kernel::hil::clock_pm::{ClockClient, ClockManager, ClientIndex};
 use sim;
 
 /// Representation of an ADC channel on the SAM4L.
@@ -160,6 +161,11 @@ pub struct Adc {
 
     // ADC client to send sample complete notifications to
     client: OptionalCell<&'static EverythingClient>,
+
+    callback_channel_num: Cell<u32>,
+    callback_frequency: Cell<u32>,
+    clock_manager: OptionalCell<&'static ClockManager>,
+    client_index: OptionalCell<&'static ClientIndex>,
 }
 
 /// Memory mapped registers for the ADC.
@@ -396,6 +402,11 @@ impl Adc {
 
             // higher layer to send responses to
             client: OptionalCell::empty(),
+
+            callback_channel_num: Cell::new(0),
+            callback_frequency: Cell::new(0),
+            clock_manager: OptionalCell::empty(),
+            client_index: OptionalCell::empty(),
         }
     }
 
@@ -475,9 +486,12 @@ impl Adc {
     }
 
     /// Setup the adc clock
-    pub fn set_clock_divisor(&self, frequency: u32) -> ReturnCode {
+    pub fn set_clock_divisor(&self, frequency: u32, peripheral_frequency: u32) -> ReturnCode {
         let regs: &AdcRegisters = &*self.registers;
-        let periph_freq = mcg::peripheral_clock_hz();
+        let mut periph_freq = mcg::peripheral_clock_hz();
+        if peripheral_frequency != 0 {
+            periph_freq = peripheral_frequency;
+        }
         // see pg. 988 of the datasheet for conversion time
         // (5 ADCK cycles + 5 bus clock cycles) + 1*(20 + 0 + 2 ADCK cycles)
         let clock_freq = frequency * 32;
@@ -520,6 +534,44 @@ impl Adc {
             // disable all interrupts, clear status, and just ignore it
             regs.sc1a.modify(Control::AIEN::CLEAR);
         }
+    }
+
+    fn sample_highspeed_callback(&self) {
+        let regs: &AdcRegisters = &*self.registers;
+
+        self.active.set(true);
+        self.continuous.set(true);
+
+        // select short sample time, select 12 bit conversion, select bus clock as input
+        regs.cfg1.modify(Configuration1::ADLSMP::Short + 
+                        Configuration1::MODE::Bit12or13 + Configuration1::ADICLK::BUSCLK);
+
+        // select ADC channel b
+        regs.cfg2.write(Configuration2::MUXSEL::ChannelB + Configuration2::ADHSC::HighSpeed);
+
+        self.calibrate();
+
+        // setup sc3 for continuous sample here
+        regs.sc3.modify(StatusControl3::ADCO::Continuous);
+
+        self.dma_buffer.map(|buffer1| {
+            let buffer_addr = &buffer1[0] as *const _;
+            let dma_len = cmp::min(buffer1.len(), self.dma_length.get());
+
+            regs.sc2.modify(StatusControl2::DMAEN::SET);
+
+            self.rx_dma.map(move |dma| {
+                dma.enable();
+                self.rx_length.set(dma_len);
+                let config = dma::TransferConfig::new(
+                    0x4003B010, buffer_addr as u32, 2, dma_len as u16);
+                dma.do_transfer(config);
+            });
+
+            // enable end of conversion interrupt and select input channel
+            // since software trigger selected, conversion starts following write to sc1a
+            regs.sc1a.write(Control::ADCH.val(self.callback_channel_num.get()));
+        });
     }
 }
 
@@ -590,7 +642,7 @@ impl hil::adc::Adc for Adc {
             self.continuous.set(true);
             self.enable_clock();
 
-            self.set_clock_divisor(frequency);
+            self.set_clock_divisor(frequency, 0);
 
             // select short sample time, select 12 bit conversion, select bus clock as input
             regs.cfg1.modify(Configuration1::ADLSMP::Short + 
@@ -634,6 +686,12 @@ impl hil::adc::Adc for Adc {
             regs.sc1a.modify(Control::AIEN::CLEAR);
             self.disable_clock();
 
+            self.client_index.map( |client_index|
+                self.clock_manager.map( |clock_manager|
+                    clock_manager.disable_clock(client_index)
+                )
+            );
+
             // stop DMA transfer if going. 
             self.rx_dma.map(|rx_dma| {
                 rx_dma.abort_transfer();
@@ -676,8 +734,6 @@ impl hil::adc::AdcHighSpeed for Adc {
         Option<&'static mut [u16]>,
         Option<&'static mut [u16]>,
     ) {
-        let regs: &AdcRegisters = &*self.registers;
-
         if self.active.get() {
             // only one operation at a time
             (ReturnCode::EBUSY, Some(buffer1), Some(buffer2))
@@ -686,49 +742,20 @@ impl hil::adc::AdcHighSpeed for Adc {
         } else if length1 == 0 {
             (ReturnCode::EINVAL, Some(buffer1), Some(buffer2))
         } else {
-            self.active.set(true);
-            self.continuous.set(true);
-            self.enable_clock();
-
-            self.set_clock_divisor(frequency);
-
-            // select short sample time, select 12 bit conversion, select bus clock as input
-            regs.cfg1.modify(Configuration1::ADLSMP::Short + 
-                            Configuration1::MODE::Bit12or13 + Configuration1::ADICLK::BUSCLK);
-
-            // select ADC channel b
-            regs.cfg2.write(Configuration2::MUXSEL::ChannelB + Configuration2::ADHSC::HighSpeed);
-
-            let res = self.calibrate();
-            if res != ReturnCode::SUCCESS {
-                return (res, Some(buffer1), Some(buffer2));
-            }
-
-            // setup sc3 for continuous sample here
-            regs.sc3.modify(StatusControl3::ADCO::Continuous);
-
-            let buffer_addr = &buffer1[0] as *const _;
-            let dma_len = cmp::min(buffer1.len(), length1);
-
             // store the buffers for later use 
+            self.callback_channel_num.set(channel.chan_num);
+            self.callback_frequency.set(frequency);
             self.dma_buffer.replace(buffer1);
             self.dma_length.set(length1);
             self.next_dma_buffer.replace(buffer2);
             self.next_dma_length.set(length2);
 
-            regs.sc2.modify(StatusControl2::DMAEN::SET);
-
-            self.rx_dma.map(move |dma| {
-                dma.enable();
-                self.rx_length.set(dma_len);
-                let config = dma::TransferConfig::new(
-                    0x4003B010, buffer_addr as u32, 2, dma_len as u16);
-                dma.do_transfer(config);
-            });
-
-            // enable end of conversion interrupt and select input channel
-            // since software trigger selected, conversion starts following write to sc1a
-            regs.sc1a.write(Control::ADCH.val(channel.chan_num));
+            self.client_index.map( |client_index| 
+                self.clock_manager.map( |clock_manager| {
+                    clock_manager.set_min_frequency(client_index, frequency*32);
+                    clock_manager.enable_clock(client_index);
+                })
+            );
 
             (ReturnCode::SUCCESS, None, None)
         }
@@ -840,3 +867,21 @@ impl dma::DMAClient for Adc {
         });
     }
 }
+
+impl ClockClient for Adc {
+    fn setup_client(&self, clock_manager: &'static ClockManager, client_index: &'static ClientIndex) {
+        self.clock_manager.set(clock_manager);
+        self.client_index.set(client_index);
+    }
+    fn configure_clock(&self, frequency: u32) {
+        self.enable_clock();
+        self.set_clock_divisor(self.callback_frequency.get(), frequency);
+
+    }
+    fn clock_enabled(&self) {
+        self.sample_highspeed_callback();
+    }
+    fn clock_disabled(&self) {
+    }
+}
+
