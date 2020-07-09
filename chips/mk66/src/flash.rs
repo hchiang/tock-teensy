@@ -173,6 +173,7 @@ enum FlashState {
     Ready,                          // Flash is ready to complete a command.
     Read,                           // Performing a read operation.
     WriteSetRam { addr: usize },    // Make sure FlexRAM is available as RAM.
+    WriteSetClock { addr: usize },  // Make sure desired clock is on.
     WriteErasing { addr: usize },   // Waiting on the page to erase.
     WriteWriting { addr: usize , offset: usize }, // Waiting on the page to actually be written.
     EraseErasing,                   // Waiting on the erase to finish.
@@ -315,18 +316,18 @@ impl FTFE {
                 });
             }
             FlashState::WriteSetRam { addr } => {
-                self.current_state.set(FlashState::WriteErasing{ addr: addr });
-                self.issue_command(FlashCMD::EraseFlashSector, addr);
-
-//TODO add another flash state for this?
+                self.current_state.set(FlashState::WriteSetClock{ addr: addr });
                 self.client_index.map( |client_index|
                     self.clock_manager.map( |clock_manager| {
-                        clock_manager.set_min_frequency(client_index, 1000000);
+                        clock_manager.set_min_frequency(client_index, 4_000_000);
                         clock_manager.enable_clock(client_index)
                     })
                 );
             }
-//TODO disable for write_to_program_buffer?
+            FlashState::WriteSetClock { addr } => {
+                self.current_state.set(FlashState::WriteErasing{ addr: addr });
+                self.issue_command(FlashCMD::EraseFlashSector, addr);
+            }
             FlashState::WriteErasing { addr } => {
                 self.current_state.set(
                     FlashState::WriteWriting{ addr: addr, offset: PROGRAM_BUFFER_SIZE });
@@ -524,9 +525,13 @@ impl FTFE {
             self.current_state.set(FlashState::WriteSetRam{ addr: addr});
             self.issue_command(FlashCMD::SetFlexRAMFunction, 0xFF);
         } else {
-            self.current_state
-                .set(FlashState::WriteErasing{ addr: addr });
-            self.issue_command(FlashCMD::EraseFlashSector, addr);
+            self.current_state.set(FlashState::WriteSetClock{ addr: addr });
+            self.client_index.map( |client_index|
+                self.clock_manager.map( |clock_manager| {
+                    clock_manager.set_min_frequency(client_index, 4_000_000);
+                    clock_manager.enable_clock(client_index)
+                })
+            );
         }
         ReturnCode::SUCCESS
     }
@@ -540,12 +545,11 @@ impl FTFE {
 
         self.current_state.set(FlashState::EraseErasing);
 
-//TODO add EraseClock state for this?
         self.issue_command(FlashCMD::EraseFlashSector, addr);
 
         self.client_index.map( |client_index|
             self.clock_manager.map( |clock_manager| {
-                clock_manager.set_min_frequency(client_index, 1000000);
+                clock_manager.set_min_frequency(client_index, 4_000_000);
                 clock_manager.enable_clock(client_index)
             })
         );
@@ -585,7 +589,7 @@ impl ClockClient for FTFE {
     fn configure_clock(&self, _frequency: u32) {}
     fn clock_enabled(&self) {
         match self.current_state.get() {
-            FlashState::WriteErasing{..} | FlashState::EraseErasing => self.handle_interrupt(),
+            FlashState::WriteSetClock{..} => self.handle_interrupt(),
             _ => {}
         }
     }
