@@ -23,7 +23,7 @@ int main(void) {
   int adc_length = 500;
   uint16_t adc_buffer[adc_length];
   uint8_t channel = 0;
-  uint32_t freq = 125000;
+  uint32_t freq = 500000;
 
   int fft_buf[16];
   int fft_mag[8];
