@@ -28,9 +28,9 @@ impl TeensyClockManager {
             0x08 => mcg::SystemClockSource::FastInternal,
             0x10 => mcg::SystemClockSource::Oscillator,
             0x20 => mcg::SystemClockSource::IRC48M,
-            0x40 => mcg::SystemClockSource::FLL(48),
-            0x80 => mcg::SystemClockSource::PLL(64),
-            _ => mcg::SystemClockSource::IRC48M,
+            0x40 => mcg::SystemClockSource::FLL(96),
+            0x80 => mcg::SystemClockSource::PLL(176),
+            _ => mcg::SystemClockSource::FLL(96),
         }
     }
 }
@@ -54,7 +54,7 @@ impl ClockConfigs for TeensyClockManager {
     }
 
     fn get_compute(&self) -> u32 {
-        return 0x20;
+        return FLL;
     }
 
     // Used to calculate acceptable clocks based on frequency range
