@@ -38,26 +38,27 @@ int main(void) {
 
   //printf("Begin\n");
   while(true) {
-    int k, i, j;
-    for(i=0; i<4; i++) {
+    int i, j, k;
+    //Stack issues if we increase adc buffer size so instead sample multiple times
+    for(i=0; i< 4; i++) {
         int err = adc_sample_buffer_sync(channel, freq, adc_buffer, adc_length);
         if (err < 0) {
             printf("Error sampling ADC: %d\n", err);
         }
     }
 
-    for(j=0; j<4; i++) {
-      for (k=0; k<adc_length/16; k++) {
-        for (i=k*16; i<(k+1)*16; i++) {
-          fft_buf[i % 16] = adc_buffer[i]; // Copy needed bc fft alg I found is int not uint16
+    for(j=0; j<4; j++) {
+        for (k=0; k<adc_length/16; k++) {
+          for (i=k*16; i<(k+1)*16; i++) {
+            fft_buf[i % 16] = adc_buffer[i]; // Copy needed bc fft alg I found is int not uint16
+          }
+          fft(fft_buf, fft_mag);
+          int l;
+          // For each returned fft magnitude, update the moving average for that magnitude bin
+          for (l=3; l<8; l++) {
+            avg_fft_mag[l] = movingAvg(avg_fft_mag[l], k, fft_mag[l]);
+          }
         }
-        fft(fft_buf, fft_mag);
-        int l;
-        // For each returned fft magnitude, update the moving average for that magnitude bin
-        for (l=3; l<8; l++) {
-          avg_fft_mag[l] = movingAvg(avg_fft_mag[l], k, fft_mag[l]);
-        }
-      }
     }
 
     memcpy(writebuf, (void*)&avg_fft_mag[0], flash_len);
@@ -70,7 +71,7 @@ int main(void) {
     }
     yield_for(&wdone);
 
-    //printf("Done\n");
+   //printf("Done\n");
 
     delay_ms(500);
   }
