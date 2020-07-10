@@ -14,6 +14,7 @@ use kernel::common::StaticRef;
 use kernel::hil;
 use kernel::ReturnCode;
 use sim;
+//use mcg;
 
 /// FMC registers. Section 31.5 of the datasheet
 #[repr(C)]
@@ -310,6 +311,7 @@ impl FTFE {
                 self.current_state.set(
                     FlashState::WriteWriting{ addr: addr, offset: PROGRAM_BUFFER_SIZE });
                 self.write_to_program_buffer(0);
+                //unsafe { mcg::SCM.change_system_clock(mcg::SystemClockSource::FastInternal); }
                 self.issue_command(FlashCMD::ProgramSection, addr);
             }
             FlashState::WriteWriting { addr, offset } => {
@@ -323,6 +325,7 @@ impl FTFE {
                     //fmc_regs.pfb23cr.modify(FlashBank23Control::B1DCE::CLEAR + 
                     //                        FlashBank23Control::B1DPE::CLEAR); 
 
+                    //unsafe { mcg::SCM.change_system_clock(mcg::SystemClockSource::Oscillator); }
                     self.client.get().map(|client| {
                         self.buffer.take().map(|buffer| {
                             client.write_complete(buffer, hil::flash::Error::CommandComplete);

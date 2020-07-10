@@ -633,6 +633,7 @@ impl hil::adc::Adc for Adc {
             regs.sc2.modify(StatusControl2::DMAEN::CLEAR);
             regs.sc1a.modify(Control::AIEN::CLEAR);
             self.disable_clock();
+            //unsafe { mcg::SCM.change_system_clock(mcg::SystemClockSource::PLL(64)); }
 
             // stop DMA transfer if going. 
             self.rx_dma.map(|rx_dma| {
@@ -690,6 +691,7 @@ impl hil::adc::AdcHighSpeed for Adc {
             self.continuous.set(true);
             self.enable_clock();
 
+            //unsafe { mcg::SCM.change_system_clock(mcg::SystemClockSource::Oscillator); }
             self.set_clock_divisor(frequency);
 
             // select short sample time, select 12 bit conversion, select bus clock as input
