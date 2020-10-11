@@ -349,8 +349,6 @@ fn set_pll_freq(freq: u32) {
 }
 
 fn set_fll_freq(freq: u32) {
-    let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
     let drs_val = match freq {
         24 => 0,
         48 => 1,
@@ -359,16 +357,9 @@ fn set_fll_freq(freq: u32) {
         _ => panic!("Invalid fll frequency selected!")
     };
 
-    match state() {
-        State::Fei | State::Fbi(..) => {
-            mcg.c4.modify(Control4::DRST_DRS.val(drs_val as u8))
-        }
-        State::Fee(..) | State::Fbe(..) => {
-            mcg.c4.modify(Control4::DRST_DRS.val(drs_val as u8) +
-                          Control4::DMX32::SET);
-        }
-        _ => {}
-    };
+    let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
+    mcg.c4.modify(Control4::DRST_DRS.val(drs_val as u8) +
+                  Control4::DMX32::SET);
 }
 
 fn to_fei() -> State {
@@ -599,10 +590,10 @@ impl SystemClockManager {
                 }
             }
             SystemClockSource::FLL(freq) => {
-                set_fll_freq(freq);
                 while clock_state != State::Fei {
                     clock_state = clock_state.to_fei();
                 }
+                set_fll_freq(freq); //can't set DRS while LP=1 (BLPI/BLPE)
             }
             SystemClockSource::PLL(freq) => {
                 osc::enable(Teensy16MHz.load as u8);
