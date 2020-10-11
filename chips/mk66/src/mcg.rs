@@ -363,8 +363,9 @@ fn set_fll_freq(freq: u32) {
 }
 
 fn to_fei() -> State {
-    let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
+    set_fll_freq(freq);
 
+    let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
     mcg.c1.modify(Control1::CLKS::LockedLoop+
                  Control1::IREFS::SlowInternal);
 
@@ -590,10 +591,12 @@ impl SystemClockManager {
                 }
             }
             SystemClockSource::FLL(freq) => {
+                if clock_state == State::Fei {
+                    set_fll_freq(freq); //can't set DRS while LP=1 (BLPI/BLPE)
+                }
                 while clock_state != State::Fei {
                     clock_state = clock_state.to_fei();
                 }
-                set_fll_freq(freq); //can't set DRS while LP=1 (BLPI/BLPE)
             }
             SystemClockSource::PLL(freq) => {
                 osc::enable(Teensy16MHz.load as u8);
