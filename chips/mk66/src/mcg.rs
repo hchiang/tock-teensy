@@ -6,6 +6,7 @@ use ::core::mem;
 use core::cell::Cell;
 use osc;
 use sim;
+use smc;
 
 use regs::mcg::*;
 
@@ -363,8 +364,6 @@ fn set_fll_freq(freq: u32) {
 }
 
 fn to_fei() -> State {
-    set_fll_freq(freq);
-
     let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
     mcg.c1.modify(Control1::CLKS::LockedLoop+
                  Control1::IREFS::SlowInternal);
@@ -509,6 +508,7 @@ pub enum SystemClockSource {
 
 pub struct SystemClockManager {
     clock_source: Cell<SystemClockSource>,
+    system_initial_configs: Cell<bool>,
 }
 
 pub static mut SCM: SystemClockManager = SystemClockManager::new(SystemClockSource::FLL(20));
@@ -523,6 +523,7 @@ impl SystemClockManager {
     const fn new(clock_source: SystemClockSource) -> SystemClockManager {
         SystemClockManager {
             clock_source: Cell::new(clock_source),
+            system_initial_configs: Cell::new(false),
         } 
     }
 
@@ -558,6 +559,15 @@ impl SystemClockManager {
         let mut set_divisors: bool = false;
         let new_clock_freq = get_clock_frequency(clock_source);
         if new_clock_freq > CORECLK {
+            if new_clock_freq > 120_000_000 {
+                if !self.system_initial_configs.get() {
+                    smc::enable_power_modes(1,0,0,0);
+                }
+                smc::hsrun_mode();
+            } 
+            else {
+                smc::run_mode();
+            }
             self.configure_div(new_clock_freq);
             set_divisors = true;
         }
@@ -591,12 +601,10 @@ impl SystemClockManager {
                 }
             }
             SystemClockSource::FLL(freq) => {
-                if clock_state == State::Fei {
-                    set_fll_freq(freq); //can't set DRS while LP=1 (BLPI/BLPE)
-                }
                 while clock_state != State::Fei {
                     clock_state = clock_state.to_fei();
                 }
+                set_fll_freq(freq);
             }
             SystemClockSource::PLL(freq) => {
                 osc::enable(Teensy16MHz.load as u8);
