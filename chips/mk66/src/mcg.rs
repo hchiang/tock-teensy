@@ -332,6 +332,7 @@ fn set_pll_freq(freq: u32) {
         112 => (28, 2),
         116 => (29, 2),
         120 => (30, 2),
+        180 => (45, 2),
 
         128 => (16, 1),
         136 => (17, 1),
@@ -562,12 +563,10 @@ impl SystemClockManager {
             if new_clock_freq > 120_000_000 {
                 if !self.system_initial_configs.get() {
                     smc::enable_power_modes(1,0,0,0);
+                    self.system_initial_configs.set(true);
                 }
                 smc::hsrun_mode();
             } 
-            else {
-                smc::run_mode();
-            }
             self.configure_div(new_clock_freq);
             set_divisors = true;
         }
@@ -616,6 +615,9 @@ impl SystemClockManager {
         }
 
         if !set_divisors {
+            if CORECLK > 180_000_000 && new_clock_freq <= 120_000_000 {
+                smc::run_mode();
+            }
             self.configure_div(new_clock_freq);
         }
 
