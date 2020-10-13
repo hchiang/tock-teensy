@@ -493,12 +493,12 @@ impl Adc {
             periph_freq = peripheral_frequency;
         }
         // see pg. 988 of the datasheet for conversion time
-        // (5 ADCK cycles + 5 bus clock cycles) + 1*(20 + 0 + 2 ADCK cycles)
+        // (5 ADCK cycles + 5 bus clock cycles) + 1*(20 + 0 + 2) ADCK cycles
         let clock_freq = frequency * 32;
         let divisor = (periph_freq + clock_freq -1)/clock_freq;
+        //let divisor = (periph_freq + clock_freq/2)/clock_freq;
         let divisor_pow2 = math::closest_power_of_two(divisor);
-        let clock_divisor = cmp::min(
-            math::log_base_two(divisor_pow2).checked_sub(2).unwrap_or(0), 3);
+        let clock_divisor = cmp::min(cmp::max(math::log_base_two(divisor_pow2),0), 3);
 
         let new_adc_clk_freq = periph_freq/(1 << clock_divisor);
         if self.adc_clk_freq.get() == new_adc_clk_freq {
