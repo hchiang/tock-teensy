@@ -6,6 +6,7 @@ use ::core::mem;
 use core::cell::Cell;
 use osc;
 use sim;
+use smc;
 
 use regs::mcg::*;
 
@@ -331,6 +332,7 @@ fn set_pll_freq(freq: u32) {
         112 => (28, 2),
         116 => (29, 2),
         120 => (30, 2),
+        180 => (45, 2),
 
         128 => (16, 1),
         136 => (17, 1),
@@ -349,8 +351,6 @@ fn set_pll_freq(freq: u32) {
 }
 
 fn set_fll_freq(freq: u32) {
-    let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
     let drs_val = match freq {
         24 => 0,
         48 => 1,
@@ -359,21 +359,13 @@ fn set_fll_freq(freq: u32) {
         _ => panic!("Invalid fll frequency selected!")
     };
 
-    match state() {
-        State::Fei | State::Fbi(..) => {
-            mcg.c4.modify(Control4::DRST_DRS.val(drs_val as u8))
-        }
-        State::Fee(..) | State::Fbe(..) => {
-            mcg.c4.modify(Control4::DRST_DRS.val(drs_val as u8) +
-                          Control4::DMX32::SET);
-        }
-        _ => {}
-    };
+    let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
+    mcg.c4.modify(Control4::DRST_DRS.val(drs_val as u8) +
+                  Control4::DMX32::SET);
 }
 
 fn to_fei() -> State {
     let mcg: &mut Registers = unsafe { mem::transmute(MCG) };
-
     mcg.c1.modify(Control1::CLKS::LockedLoop+
                  Control1::IREFS::SlowInternal);
 
@@ -517,6 +509,7 @@ pub enum SystemClockSource {
 
 pub struct SystemClockManager {
     clock_source: Cell<SystemClockSource>,
+    system_initial_configs: Cell<bool>,
 }
 
 pub static mut SCM: SystemClockManager = SystemClockManager::new(SystemClockSource::FLL(20));
@@ -531,6 +524,7 @@ impl SystemClockManager {
     const fn new(clock_source: SystemClockSource) -> SystemClockManager {
         SystemClockManager {
             clock_source: Cell::new(clock_source),
+            system_initial_configs: Cell::new(false),
         } 
     }
 
@@ -566,6 +560,13 @@ impl SystemClockManager {
         let mut set_divisors: bool = false;
         let new_clock_freq = get_clock_frequency(clock_source);
         if new_clock_freq > CORECLK {
+            if new_clock_freq > 120_000_000 {
+                if !self.system_initial_configs.get() {
+                    smc::enable_power_modes(1,0,0,0);
+                    self.system_initial_configs.set(true);
+                }
+                smc::hsrun_mode();
+            } 
             self.configure_div(new_clock_freq);
             set_divisors = true;
         }
@@ -599,10 +600,10 @@ impl SystemClockManager {
                 }
             }
             SystemClockSource::FLL(freq) => {
-                set_fll_freq(freq);
                 while clock_state != State::Fei {
                     clock_state = clock_state.to_fei();
                 }
+                set_fll_freq(freq);
             }
             SystemClockSource::PLL(freq) => {
                 osc::enable(Teensy16MHz.load as u8);
@@ -614,6 +615,9 @@ impl SystemClockManager {
         }
 
         if !set_divisors {
+            if CORECLK > 180_000_000 && new_clock_freq <= 120_000_000 {
+                smc::run_mode();
+            }
             self.configure_div(new_clock_freq);
         }
 
