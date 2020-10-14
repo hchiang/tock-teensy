@@ -1,13 +1,14 @@
 use kernel::hil::clock_pm::*;
 use mcg;
 
-const RTC32K: u32           = 0x002; 
-const SLOWINTERNAL: u32     = 0x004; 
-const FASTINTERNAL: u32     = 0x008; 
-const OSCILLATOR: u32       = 0x010; 
-const IRC48M: u32           = 0x020; 
-const FLL: u32              = 0x040;    
-const PLL: u32              = 0x080; 
+const RTC32K: u32           = 0x001; 
+const SLOWINTERNAL: u32     = 0x002; 
+const FASTINTERNAL: u32     = 0x004; 
+const OSCILLATOR: u32       = 0x008; 
+const IRC48M: u32           = 0x010; 
+const FLL: u32              = 0x020;    
+const PLL: u32              = 0x040; 
+const ALL_CLOCKS: u32       = 0x07f; 
 
 pub struct TeensyClockManager;
 
@@ -38,23 +39,23 @@ impl TeensyClockManager {
 impl ClockConfigs for TeensyClockManager {
 
     fn get_num_clock_sources(&self) -> u32 {
-        return 8;
+        7
     }
 
     fn get_max_freq(&self) -> u32 {
-        return 180_000_000;
+        180_000_000
     }
 
     fn get_all_clocks(&self) -> u32 {
-        return 0xfe;
-    }
-
-    fn get_default(&self) -> u32 {
-        return 0xff;
+        ALL_CLOCKS 
     }
 
     fn get_compute(&self) -> u32 {
-        return PLL;
+        PLL
+    }
+
+    fn get_noncompute(&self) -> u32 {
+        RTC32K | SLOWINTERNAL
     }
 
     // Used to calculate acceptable clocks based on frequency range
@@ -84,7 +85,6 @@ impl ClockConfigs for TeensyClockManager {
         clockmask
     }
 
-
     fn get_clock_frequency(&self, clock: u32) -> u32 {
         let system_clock = self.convert_to_clock(clock);
         mcg::get_clock_frequency(system_clock)
@@ -98,6 +98,16 @@ impl ClockConfigs for TeensyClockManager {
         let system_clock = self.convert_to_clock(clock);
         unsafe {
             mcg::SCM.change_system_clock(system_clock);
+        }
+    }
+
+    fn get_intermediates_list(&self, clock:u32) -> IntermediateList {
+        let external_clocks = RTC32K | OSCILLATOR | IRC48M;
+        match clock {
+            external_clocks => IntermediateList::new(ALL_CLOCKS & !external_clocks, external_clocks & !clock),
+            FLL | SLOWINTERNAL | FASTINTERNAL => IntermediateList::new(external_clocks, PLL),
+            PLL => IntermediateList::new(external_clocks, FLL | SLOWINTERNAL | FASTINTERNAL),
+            _ => IntermediateList::new(0, 0),
         }
     }
 }

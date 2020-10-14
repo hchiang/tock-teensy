@@ -303,12 +303,6 @@ impl FTFE {
             FlashState::Read => {
                 self.current_state.set(FlashState::Ready);
 
-                self.client_index.map( |client_index|
-                    self.clock_manager.map( |clock_manager|
-                        clock_manager.disable_clock(client_index)
-                    )
-                );
-
                 self.client.get().map(|client| {
                     self.buffer.take().map(|buffer| {
                         client.read_complete(buffer, hil::flash::Error::CommandComplete);
@@ -482,13 +476,6 @@ impl FTFE {
             // invalid flash address
             return ReturnCode::EINVAL;
         }
-
-        self.client_index.map( |client_index|
-            self.clock_manager.map( |clock_manager| {
-                clock_manager.set_min_frequency(client_index, 40000000);
-                clock_manager.enable_clock(client_index);
-            })
-        );
 
         // Actually do a copy from flash into the buffer.
         let mut byte: *const u8 = address as *const u8;
