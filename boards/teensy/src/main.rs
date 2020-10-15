@@ -37,6 +37,7 @@ struct Teensy {
     gpio: <GpioComponent as Component>::Output,
     led: <LedComponent as Component>::Output,
     alarm: <AlarmComponent as Component>::Output,
+    clock_driver: <ClockComponent as Component>::Output,
     //spi: <VirtualSpiComponent as Component>::Output,
     rng: <RngaComponent as Component>::Output,
     ipc: kernel::ipc::IPC,
@@ -60,6 +61,7 @@ impl kernel::Platform for Teensy {
             capsules::rng::DRIVER_NUM => f(Some(self.rng)),
 
             kernel::ipc::DRIVER_NUM => f(Some(&self.ipc)),
+            28 => f(Some(self.clock_driver)),
             _ => f(None),
         }
     }
@@ -97,6 +99,8 @@ pub unsafe fn reset_handler() {
     debug_gpio!(1, make_output);
     debug_gpio!(1, clear);
 
+    let clock_driver = ClockComponent::new().finalize().unwrap();
+
     let xconsole = XConsoleComponent::new().finalize().unwrap();
     let adc = AdcComponent::new().finalize().unwrap();
     let nonvolatile_storage = NonvolatileStorageComponent::new().finalize().unwrap();
@@ -113,6 +117,7 @@ pub unsafe fn reset_handler() {
     let teensy = Teensy {
         xconsole: xconsole,
         adc: adc,
+        clock_driver: clock_driver,
         nonvolatile_storage: nonvolatile_storage,
         gpio: gpio,
         led: led,
