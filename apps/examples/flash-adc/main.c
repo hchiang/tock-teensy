@@ -24,8 +24,11 @@ uint16_t adc_buffer[ADC_SAMPLES];
 int main(void) {
 
   uint8_t channel = 0;
-  uint32_t freq = 130000;
+  uint32_t freq = 31500;
+  uint16_t length = ADC_SAMPLES;
 
+  uint16_t buffer_idx = 0;
+  volatile double avg_buffer[25];
   int fft_buf[16];
   int fft_mag[8];
   float avg_fft_mag[8]; //For each frequency bin, keep moving average of magnitude
@@ -46,6 +49,13 @@ int main(void) {
         printf("Error sampling ADC: %d\n", err);
     }
     
+    long sum = 0;
+    for (i=0; i<length; i++) {
+        adc_buffer[i] = adc_buffer[i] * 3 - 200; // Mock conversion to real-world units
+        sum += adc_buffer[i];
+    }
+    avg_buffer[buffer_idx++] = ((double)sum)/length;
+
     for (k=0; k<ADC_SAMPLES/16; k++) {
       for (i=k*16; i<(k+1)*16; i++) {
         fft_buf[i % 16] = adc_buffer[i]; // Copy needed bc fft alg I found is int not uint16
@@ -53,7 +63,7 @@ int main(void) {
       fft(fft_buf, fft_mag);
       int l;
       // For each returned fft magnitude, update the moving average for that magnitude bin
-      for (l=3; l<8; l++) {
+      for (l=1; l<8; l++) {
         avg_fft_mag[l] = movingAvg(avg_fft_mag[l], k, fft_mag[l]);
       }
     }
@@ -70,6 +80,6 @@ int main(void) {
 
     //printf("Done\n");
 
-    delay_ms(500);
+    delay_ms(1000);
   }
 }

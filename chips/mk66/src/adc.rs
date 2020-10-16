@@ -498,15 +498,22 @@ impl Adc {
         let divisor = (periph_freq + clock_freq -1)/clock_freq;
         //let divisor = (periph_freq + clock_freq/2)/clock_freq;
         let divisor_pow2 = math::closest_power_of_two(divisor);
-        let clock_divisor = cmp::min(cmp::max(math::log_base_two(divisor_pow2),0), 3);
+        let clock_divisor = cmp::min(cmp::max(math::log_base_two(divisor_pow2),0), 4);
 
         let new_adc_clk_freq = periph_freq/(1 << clock_divisor);
         if self.adc_clk_freq.get() == new_adc_clk_freq {
-           return ReturnCode::SUCCESS;
+            return ReturnCode::SUCCESS;
         }
         self.adc_clk_freq.set(new_adc_clk_freq);
 
-        regs.cfg1.modify(Configuration1::ADIV.val(clock_divisor));
+        if clock_divisor == 4 {
+            regs.cfg1.modify(Configuration1::ADIV.val(clock_divisor-1) +
+                Configuration1::ADICLK::BUSCLKDIV2);
+        }
+        else {
+            regs.cfg1.modify(Configuration1::ADIV.val(clock_divisor) +
+                Configuration1::ADICLK::BUSCLK);
+        }
 
         ReturnCode::SUCCESS
     }
@@ -542,9 +549,9 @@ impl Adc {
         self.active.set(true);
         self.continuous.set(true);
 
-        // select short sample time, select 12 bit conversion, select bus clock as input
+        // select short sample time, select 12 bit conversion
         regs.cfg1.modify(Configuration1::ADLSMP::Short + 
-                        Configuration1::MODE::Bit12or13 + Configuration1::ADICLK::BUSCLK);
+                        Configuration1::MODE::Bit12or13);
 
         // select ADC channel b
         regs.cfg2.write(Configuration2::MUXSEL::ChannelB + Configuration2::ADHSC::HighSpeed);
@@ -603,9 +610,9 @@ impl hil::adc::Adc for Adc {
             self.continuous.set(false);
             self.enable_clock();
 
-            // divide clock by 1, select short sample time, select 12 bit conversion, select bus clock as input
+            // divide clock by 1, select short sample time
             regs.cfg1.write(Configuration1::ADIV::Div1 + Configuration1::ADLSMP::Short + 
-                            Configuration1::MODE::Bit12or13 + Configuration1::ADICLK::BUSCLK);
+                            Configuration1::MODE::Bit12or13);
 
             // select ADC channel b
             regs.cfg2.write(Configuration2::MUXSEL::ChannelB);
@@ -644,9 +651,9 @@ impl hil::adc::Adc for Adc {
 
             self.set_clock_divisor(frequency, 0);
 
-            // select short sample time, select 12 bit conversion, select bus clock as input
+            // select short sample time, select 12 bit conversion
             regs.cfg1.modify(Configuration1::ADLSMP::Short + 
-                            Configuration1::MODE::Bit12or13 + Configuration1::ADICLK::BUSCLK);
+                            Configuration1::MODE::Bit12or13); 
 
             // select ADC channel b
             regs.cfg2.write(Configuration2::MUXSEL::ChannelB + Configuration2::ADHSC::HighSpeed);
@@ -753,6 +760,7 @@ impl hil::adc::AdcHighSpeed for Adc {
             self.client_index.map( |client_index| 
                 self.clock_manager.map( |clock_manager| {
                     clock_manager.set_min_frequency(client_index, frequency*32);
+                    clock_manager.set_max_frequency(client_index, frequency*32*16);
                     clock_manager.enable_clock(client_index);
                 })
             );
