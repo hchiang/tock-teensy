@@ -3,6 +3,7 @@
 #include <internal/nonvolatile_storage.h>
 #include "ninedof.h"
 #include "fft.h"
+#include <clock.h>
 
 bool wdone = false;
 static void write_done(__attribute__ ((unused)) int length,
@@ -44,7 +45,9 @@ int main(void) {
   while(true) {
     int i, k;
     //Stack issues if we increase adc buffer size so instead sample multiple times
+    clock_set(FastInternal);
     int err = adc_sample_buffer_sync(channel, freq, adc_buffer, ADC_SAMPLES);
+    clock_set(FLL96);
     if (err < 0) {
         printf("Error sampling ADC: %d\n", err);
     }
@@ -71,6 +74,7 @@ int main(void) {
     memcpy(writebuf, (void*)&avg_fft_mag[0], flash_len);
 
     wdone = false;
+    clock_set(FastInternal);
     ret  = nonvolatile_storage_internal_write(0, flash_len);
     if (ret != 0) {
       printf("\tERROR calling write\n");
