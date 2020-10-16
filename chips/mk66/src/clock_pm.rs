@@ -5,12 +5,15 @@ use mcg;
 const SLOWINTERNAL: u32     = 0x001; 
 const FASTINTERNAL: u32     = 0x002; 
 const OSCILLATOR: u32       = 0x004; 
-const IRC48M: u32           = 0x008; 
-const FLL: u32              = 0x010;    
-const PLL64: u32            = 0x020; 
-const PLL120: u32           = 0x040; 
-const PLL180: u32           = 0x080; 
-const ALL_CLOCKS: u32       = 0x0ff; 
+const FLL24: u32            = 0x008;    
+const FLL48: u32            = 0x010;    
+const IRC48M: u32           = 0x020; 
+const PLL64: u32            = 0x040; 
+const FLL72: u32            = 0x080;    
+const FLL96: u32            = 0x100;    
+const PLL120: u32           = 0x200; 
+const PLL180: u32           = 0x400; 
+const ALL_CLOCKS: u32       = 0x7ff; 
 
 pub struct TeensyClockManager;
 
@@ -31,11 +34,14 @@ impl TeensyClockManager {
             FASTINTERNAL => mcg::SystemClockSource::FastInternal,
             OSCILLATOR => mcg::SystemClockSource::Oscillator,
             IRC48M => mcg::SystemClockSource::IRC48M,
-            FLL => mcg::SystemClockSource::FLL(48),
+            FLL24 => mcg::SystemClockSource::FLL(24),
+            FLL48 => mcg::SystemClockSource::FLL(48),
+            FLL72 => mcg::SystemClockSource::FLL(72),
+            FLL96 => mcg::SystemClockSource::FLL(96),
             PLL64 => mcg::SystemClockSource::PLL(64),
             PLL120 => mcg::SystemClockSource::PLL(120),
             PLL180 => mcg::SystemClockSource::PLL(180),
-            _ => mcg::SystemClockSource::PLL(64),
+            _ => mcg::SystemClockSource::PLL(180),
         }
     }
 }
@@ -43,7 +49,7 @@ impl TeensyClockManager {
 impl ClockConfigs for TeensyClockManager {
 
     fn get_num_clock_sources(&self) -> u32 {
-        8
+        11 
     }
 
     fn get_max_freq(&self) -> u32 {
@@ -55,7 +61,7 @@ impl ClockConfigs for TeensyClockManager {
     }
 
     fn get_compute(&self) -> u32 {
-        PLL64
+        FLL96
     }
 
     fn get_noncompute(&self) -> u32 {
@@ -79,8 +85,17 @@ impl ClockConfigs for TeensyClockManager {
         if min_freq <= 16_000_000 && max_freq >= 16_000_000 { 
             clockmask |= OSCILLATOR;
         } 
+        if min_freq <= 24_000_000 && max_freq >= 24_000_000 { 
+            clockmask |= FLL24;
+        }
         if min_freq <= 48_000_000 && max_freq >= 48_000_000 { 
-            clockmask |= IRC48M + FLL;
+            clockmask |= IRC48M + FLL48;
+        }
+        if min_freq <= 72_000_000 && max_freq >= 72_000_000 { 
+            clockmask |= FLL72;
+        }
+        if min_freq <= 96_000_000 && max_freq >= 96_000_000 { 
+            clockmask |= FLL96;
         }
         if min_freq <= 64_000_000 && max_freq >= 64_000_000 {
             clockmask |= PLL64;
@@ -114,10 +129,11 @@ impl ClockConfigs for TeensyClockManager {
     fn get_intermediates_list(&self, clock:u32) -> IntermediateList {
         let external_clocks = OSCILLATOR | IRC48M;
         let pll = PLL64 | PLL120 | PLL180;
+        let fll = FLL24 | FLL48 | FLL72 | FLL96;
         match clock {
             OSCILLATOR | IRC48M => IntermediateList::new(ALL_CLOCKS & !external_clocks, external_clocks & !clock),
-            FLL | SLOWINTERNAL | FASTINTERNAL => IntermediateList::new(OSCILLATOR, pll),
-            PLL64 | PLL120 | PLL180 => IntermediateList::new(OSCILLATOR, FLL | SLOWINTERNAL | FASTINTERNAL),
+            FLL24 | FLL48 | FLL72 | FLL96 | SLOWINTERNAL | FASTINTERNAL => IntermediateList::new(OSCILLATOR, pll),
+            PLL64 | PLL120 | PLL180 => IntermediateList::new(OSCILLATOR, fll | SLOWINTERNAL | FASTINTERNAL),
             _ => IntermediateList::new(0, 0),
         }
     }
